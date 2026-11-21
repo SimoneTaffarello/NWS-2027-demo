@@ -104,7 +104,7 @@ table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){overflow:hid
 <div id="sw-toast" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:9999;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.4)"><span>&#x1F504; Nuova versione disponibile</span><button onclick="location.reload()" style="background:#e63329;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Aggiorna</button></div>
 <div id="app">
   <header id="hdr">
-    <div class="logo">NW <span>STYLE</span> 2026</div>
+    <div class="logo">NW <span>STYLE</span> 2027</div>
     <nav id="nav">
       <button class="nb active" onclick="goTab('dashboard')" id="t-dashboard"><span class="dot" style="background:#e63329"></span>Dashboard</button>
       <button class="nb" onclick="goTab('upload')" id="t-upload"><span class="dot" style="background:#60a5fa"></span>Carica Tappa</button>
@@ -118,8 +118,8 @@ table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){overflow:hid
   </header>
   <main id="content">
     <div style="background:#fff4d6;color:#5c4100;border-bottom:1px solid #e8c66a;padding:8px 20px;font-size:13px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
-<b>DEMO 2027 per il comitato</b><span>Dati di prova, salvati solo nel tuo browser.</span>
-<a href="../" style="color:#5c4100">← Torna alla presentazione</a><a href="../giuria/" style="color:#5c4100">Giuria di tappa</a>
+<b>DEMO 2027 · risultati simulati</b><span>Nomi degli atleti inventati, dati salvati solo nel tuo browser.</span>
+<a href="../" style="color:#5c4100">← Presentazione</a><a href="../altre-gare.html" style="color:#5c4100">Altre gare</a><a href="../giuria/" style="color:#5c4100">Area giuria (riservata)</a>
 <a href="#" onclick="NWSDemoDB.reset();location.reload();return false" style="color:#5c4100">Ricomincia da capo</a></div>
 <div id="public-banner" style="display:none;background:rgba(96,165,250,.1);border-bottom:1px solid rgba(96,165,250,.3);padding:8px 20px;font-size:12px;color:var(--ti);align-items:center;gap:8px;flex-shrink:0">&#x1F512; <strong>Modalità pubblica</strong> &mdash; sola lettura. Caricamento e modifiche disabilitati.</div>
     <div id="v-dashboard"></div>
@@ -141,10 +141,24 @@ table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){overflow:hid
 <script src="../demo-db.js"></script>
 <script>
 var STAGES=[
-  {"id": "bologna-ti", "name": "Tappa Italia 2027 (demo)", "date": "2027-04-11", "circuits": ["ti", "nord", "cs", "sic"], "jollyFor": [], "label": "Tappa Italia"},
-  {"id": "demo-padova", "name": "Padova (demo)", "date": "2027-05-16", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
-  {"id": "demo-mestre", "name": "Mestre (demo)", "date": "2027-09-12", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
-  {"id": "san-dona", "name": "Finalissima 2027 (demo)", "date": "2027-10-17", "circuits": ["fin"], "jollyFor": [], "label": "Finalissima"}
+  {"id": "torino", "name": "Torino", "date": "2027-03-21", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "bologna-ti", "name": "Bologna", "date": "2027-04-04", "circuits": ["ti", "nord", "cs", "sic"], "jollyFor": [], "label": "Tappa Italia"},
+  {"id": "bosisio", "name": "Bosisio", "date": "2027-04-18", "circuits": ["nord"], "jollyFor": ["nord"], "label": "Nord"},
+  {"id": "bassano", "name": "Bassano", "date": "2027-05-09", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "feltre", "name": "Feltre", "date": "2027-06-06", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "montello", "name": "Montello", "date": "2027-06-27", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "mestre", "name": "Mestre", "date": "2027-09-11", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "enego", "name": "Enego", "date": "2027-09-26", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "illasi", "name": "Illasi", "date": "2027-10-09", "circuits": ["nord"], "jollyFor": [], "label": "Nord"},
+  {"id": "perugia", "name": "Perugia", "date": "2027-05-09", "circuits": ["cs"], "jollyFor": ["cs"], "label": "Centro-Sud"},
+  {"id": "pomezia", "name": "Pomezia (nott.)", "date": "2027-05-29", "circuits": ["cs"], "jollyFor": [], "label": "Centro-Sud"},
+  {"id": "roma", "name": "Roma", "date": "2027-06-20", "circuits": ["cs"], "jollyFor": [], "label": "Centro-Sud"},
+  {"id": "tivoli", "name": "Tivoli", "date": "2027-09-05", "circuits": ["cs"], "jollyFor": [], "label": "Centro-Sud"},
+  {"id": "roma-finale", "name": "Roma (finale)", "date": "2027-09-26", "circuits": ["cs"], "jollyFor": [], "label": "Centro-Sud"},
+  {"id": "catania", "name": "Catania", "date": "2027-03-21", "circuits": ["sic"], "jollyFor": [], "label": "Sicilia"},
+  {"id": "palermo", "name": "Palermo", "date": "2027-04-17", "circuits": ["sic"], "jollyFor": [], "label": "Sicilia"},
+  {"id": "ragusa", "name": "Ragusa", "date": "2027-05-15", "circuits": ["sic"], "jollyFor": ["sic"], "label": "Sicilia"},
+  {"id": "san-dona", "name": "Tortoreto Lido", "date": "2027-10-24", "circuits": ["fin"], "jollyFor": [], "label": "Finalissima"}
 ];
 var CATS=[
   {id:'istruttore-m',name:'Istruttori',short:'Istruttori',oldShort:'Istr.M',type:'ind'},
@@ -171,7 +185,7 @@ var QLIM={
 var SUPA_URL='https://oykewinjysrgnhdpkabs.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95a2V3aW5qeXNyZ25oZHBrYWJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTAxNTcsImV4cCI6MjA4OTc4NjE1N30.18ntvRaxidMZrxMO9XJuUbThxQYN0h3m5HboUcpqaaU';
 
-var DB={settings:{asdHighlight:'Nordic Laguna'},results:{}};
+var DB={settings:{asdHighlight:'Sile Walking'},results:{}};
 
 function loadSettings(){try{var r=localStorage.getItem('nws2027demo_settings');if(r)DB.settings=JSON.parse(r);}catch(e){}}
 function saveSettings2(){try{localStorage.setItem('nws2027demo_settings',JSON.stringify(DB.settings));}catch(e){}}
@@ -2687,7 +2701,7 @@ function finalistiHtml(cirId,cat,withStages){
   var cols='<col style="width:'+wPos+'%"><col style="width:'+wName+'%"><col style="width:'+wAsd+'%">'+stgs.map(function(){return '<col style="width:'+wStg+'%">';}).join('')+'<col style="width:'+wTot+'%">';
   var fin=STAGES.find(function(s){return s.id==='san-dona';});
   return '<div style="font-family:var(--fb);color:#111;background:#fff">'+
-    '<div style="font-family:var(--fh);font-weight:700;letter-spacing:2px;font-size:13px;color:var(--red)">NORDIC WALKING STYLE 2026 &middot; FINALISSIMA'+(fin?' &middot; '+fin.name.toUpperCase():'')+'</div>'+
+    '<div style="font-family:var(--fh);font-weight:700;letter-spacing:2px;font-size:13px;color:var(--red)">NORDIC WALKING STYLE 2027 &middot; FINALISSIMA'+(fin?' &middot; '+fin.name.toUpperCase():'')+'</div>'+
     '<div style="font-family:var(--fh);font-weight:800;font-size:30px;margin:4px 0 2px">'+cat.name.toUpperCase()+'</div>'+
     '<div style="font-size:14px;color:#555;margin-bottom:14px">Qualificati '+CIR[cirId].name+' &middot; '+(isCop?'prime '+f.qlim+' coppie':((cat.id==='camminatore-f'||cat.id==='istruttore-f')?'prime ':'primi ')+f.qlim)+'</div>'+
     '<table style="width:100%;table-layout:fixed;border-collapse:collapse">'+

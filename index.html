@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
 <title>NW Style 2027 · demo</title>
 <link rel="icon" href="giuria/icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
 <style>
-/* Layout: una colonna di lettura, due porte d'ingresso affiancate, poi il percorso di prova numerato (è davvero una sequenza) */
+/* Layout: una colonna di lettura, i due livelli (porte d'ingresso) affiancati, poi il percorso di prova numerato */
 :root{--bg:#f3f4f1;--card:#ffffff;--ink:#16181a;--mute:#5d646b;--line:#dcdfdb;--red:#c8322a;--green:#2e7d4f;--warn-bg:#fff4d6;--warn-ink:#5c4100;
   --fh:"Barlow Condensed","Arial Narrow",Arial,sans-serif;--fb:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#141618;--card:#1d2023;--ink:#eceeed;--mute:#a3a9ae;--line:#33383c;--red:#ef5b52;--green:#5cc28a;--warn-bg:#3a3018;--warn-ink:#f2d58c;color-scheme:dark}}
@@ -23,55 +24,84 @@ h2{font-size:26px;margin-bottom:12px}
 .doors{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:22px 0 34px}
 .door{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit;text-decoration:none}
 .door:hover,.door:focus-visible{border-color:var(--red);outline:none}
+.door .lv{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
 .door b{font-family:var(--fh);font-size:24px;letter-spacing:.4px}.door small{color:var(--mute);font-size:15px}
 .door .go{color:var(--red);font-weight:600;margin-top:auto}
 ol.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:10px}
 ol.steps li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 ol.steps li::before{content:counter(s);font-family:var(--fh);font-weight:800;font-size:24px;color:var(--red);line-height:1.2}
 section{margin-top:34px}
+table.cal{border-collapse:collapse;width:100%;font-size:15px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.cal td,table.cal th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+table.cal th{font-size:13px;color:var(--mute);font-weight:600}
+.st{font-size:13px;font-weight:600;border-radius:99px;padding:1px 8px;white-space:nowrap}
+.st.ok{background:#dff3e7;color:#1e6b3e}.st.now{background:#fbe1de;color:#9b2c2c}.st.no{color:var(--mute)}
 ul.plain{margin:0;padding-left:20px}ul.plain li{margin:4px 0}
 a{color:var(--red)}
-code{font-size:.9em;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 4px}
 footer{margin-top:40px;color:var(--mute);font-size:14px}
 </style>
 </head>
 <body>
 <main>
   <h1>NW Style <span>2027</span> · demo</h1>
-  <p class="lead">Dalle schede dei giudici alla classifica: iscritti, pettorali, schede da stampare, lettura dei voti con la foto del telefono e classifica di tappa, che passa direttamente nelle classifiche del circuito.</p>
+  <p class="lead">Dalle iscrizioni alla classifica pubblica: pettorali e manche, schede dei giudici, lettura dei voti con la foto del telefono, classifica di tappa approvata e pubblicata nel circuito.</p>
 
-  <div class="note">È una demo: i dati sono di prova (nomi inventati) e restano solo nel tuo browser. Puoi provare tutto senza rompere niente.</div>
+  <div class="note">Demo con <b>risultati simulati</b> e <b>nomi degli atleti inventati</b>; le ASD sono quelle del circuito Nord. I dati restano solo nel tuo browser: puoi provare tutto senza rompere niente.</div>
 
   <div class="doors">
-    <a class="door" href="giuria/"><b>Giuria di tappa</b><small>Gara, iscritti, pettorali e manche, schede da stampare, lettura delle foto, classifica di tappa.</small><span class="go">Apri →</span></a>
-    <a class="door" href="classifiche/"><b>Classifiche del circuito</b><small>L'app delle classifiche 2026, qui con due tappe 2027 di prova: Padova è già disputata.</small><span class="go">Apri →</span></a>
+    <a class="door" href="giuria/"><span class="lv">Livello riservato</span><b>Area giuria</b><small>Per comitato e giuria: iscritti, pettorali, postazioni e giudici, schede da stampare, lettura delle foto, classifica di tappa e pubblicazione. Nella demo si entra con il PIN <b>2027</b>.</small><span class="go">Entra →</span></a>
+    <a class="door" href="classifiche/?public=1"><span class="lv">Livello pubblico</span><b>Classifica del circuito</b><small>Per atleti e ASD: solo le classifiche pubblicate, in sola lettura. Nessun voto dei singoli giudici. Le gare fuori classifica sono in <u>Altre gare</u>.</small><span class="go">Apri →</span></a>
   </div>
 
   <section>
-    <h2>Come provarla (10 minuti)</h2>
+    <h2>Lo scenario</h2>
+    <table class="cal">
+      <tr><th>Data</th><th>Tappa</th><th>Stato nella demo</th></tr>
+      <tr><td>14/03</td><td>Vicenza · Staffetta nazionale a squadre (fuori classifica)</td><td><span class="st now">da caricare (prova facoltativa)</span></td></tr>
+      <tr><td>21/03</td><td>Torino · Nord gara 1</td><td><span class="st ok">disputata e pubblicata</span></td></tr>
+      <tr><td>04/04</td><td>Bologna · Tappa Italia</td><td><span class="st ok">disputata e pubblicata</span></td></tr>
+      <tr><td>18/04</td><td><b>Bosisio (LC) · Nord gara 2 Jolly</b></td><td><span class="st now">da caricare adesso</span></td></tr>
+      <tr><td>09/05 → 09/10</td><td>Bassano, Feltre, Montello, Mestre, Enego, Illasi</td><td><span class="st no">da disputare</span></td></tr>
+      <tr><td>24/10</td><td>Finalissima · Tortoreto Lido</td><td><span class="st no">da disputare</span></td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Come provarla (15 minuti)</h2>
     <ol class="steps">
-      <li><div>Apri <a href="giuria/">Giuria di tappa</a>. In <b>1 · Gara e schede</b> la tappa è già <b>Mestre (demo)</b>.</div></li>
-      <li><div>Scarica i due file di esempio, nel formato dei fogli del comitato: <a href="iscritti_individuali.xlsx">iscritti individuali</a> (100) e <a href="iscritti_coppie.xlsx">iscritti coppie</a> (10). Carica il primo con <b>Carica atleti</b> e il secondo con <b>Carica coppie</b>, in qualsiasi ordine.</div></li>
-      <li><div>Per vedere la <b>pulizia di nomi e ASD</b>, al posto degli individuali carica il <a href="iscritti_individuali_con_errori.xlsx">file con errori</a> (nomi in maiuscolo, nomi invertiti, un doppione, ASD scritte in più modi): sotto l'elenco compare <b>Controllo nomi e ASD</b>. Scegli e premi <b>Applica</b>.</div></li>
-      <li><div>Premi <b>Assegna pettorali</b>: Gruppo 1, indifferenti e Gruppo 2 vanno nelle manche da 25, le coppie partono dal 150 (prima istruttori e camminatori, poi le miste) e le sezioni si compilano da sole. <b>Scarica elenco con pettorali</b> restituisce i due fogli con le colonne del comitato. Poi <b>Genera schede</b> per vedere le schede di ogni giudice.</div></li>
-      <li><div>In <b>2 · Leggi schede</b> premi <b>Prova con una scheda di esempio</b>: l'app compila una scheda a caso e la legge come se fosse una foto. Se vuoi, stampa una scheda dal PC, compilala a mano e fotografala col telefono.</div></li>
-      <li><div>Premi <b>Simula tutte le schede della tappa</b>, poi apri <b>3 · Classifica</b>: classifica per categoria con <i>Tot. giudici</i> e <i>Punti</i>.</div></li>
-      <li><div>Premi <b>Pubblica nelle classifiche del circuito</b> e apri le <a href="classifiche/">classifiche</a>: Mestre compare accanto a Padova e i punti del circuito si aggiornano.</div></li>
+      <li><div>Apri la <a href="classifiche/?public=1">classifica pubblica</a>: ci sono Torino e Bologna, Bosisio non ancora.</div></li>
+      <li><div>Entra nell'<a href="giuria/">area giuria</a> con il PIN <b>2027</b>. In <b>1 · Gara e schede</b> la tappa è già <b>Bosisio</b>, con le 6 postazioni del 2027: due alternati (uno composto), parallelo a 2, parallelo a 3 e la mix con due giudici che si scambiano al 2° giro. Apri <b>Riepilogo per il briefing dei giudici</b> per vedere chi valuta cosa in ogni giro.</div></li>
+      <li><div>Scarica le iscrizioni di Bosisio nel formato dei fogli del comitato: <a href="iscritti_bosisio_individuali.xlsx">individuali</a> e <a href="iscritti_bosisio_coppie.xlsx">coppie</a>. Caricale con <b>Carica atleti</b> e <b>Carica coppie</b>.</div></li>
+      <li><div>Sotto l'elenco compare <b>Controllo nomi e ASD</b>: i file contengono gli errori tipici dei moduli (nomi in maiuscolo, nome e cognome invertiti, un nome scritto diversamente da Torino, ASD scritte in più modi, un doppione). Scegli e premi <b>Applica</b>.</div></li>
+      <li><div>Premi <b>Assegna pettorali</b> (gruppi di partenza, manche da 25, coppie dal 150), poi <b>Genera schede</b>: una scheda per ogni giudice, con postazione e andature di ogni giro già stampate.</div></li>
+      <li><div>In <b>2 · Leggi schede</b> premi <b>Simula tutte le schede della tappa</b>: l'app compila e "fotografa" ogni scheda e la legge come una foto vera.</div></li>
+      <li><div>In <b>3 · Classifica</b> controlla la classifica di tappa e premi <b>Pubblica nelle classifiche del circuito</b>.</div></li>
+      <li><div>Torna alla <a href="classifiche/?public=1">classifica pubblica</a>: Bosisio compare con i punti Jolly raddoppiati. Per ripartire da zero usa <b>Ricomincia da capo</b> nella fascia gialla.</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Staffetta e gare fuori classifica (5 minuti)</h2>
+    <ol class="steps">
+      <li><div>Nell'area giuria scegli la gara <b>Vicenza · Staffetta</b>: tipo <b>fuori classifica</b>, classifica <b>solo squadre</b>, pettorale unico per squadra (12·1 … 12·4). Con <b>+ Nuova gara</b> il comitato può aggiungere altre gare durante la stagione.</div></li>
+      <li><div>Carica <a href="iscritti_vicenza_staffetta.xlsx">iscritti della staffetta</a> (colonna SQUADRA, 10 squadre) e premi <b>Forma squadre e pettorali</b>: una squadra ha un atleta di un'altra ASD e l'app chiede conferma.</div></li>
+      <li><div><b>Genera schede</b>, <b>Simula tutte le schede</b>, poi in <b>3 · Classifica</b> la classifica a squadre: somma dei 4 componenti, pari merito risolti con i criteri scelti.</div></li>
+      <li><div>Premi <b>Pubblica in "Altre gare"</b> e apri <a href="altre-gare.html">Altre gare</a>: la staffetta ha la sua classifica e non tocca i punti del circuito.</div></li>
     </ol>
   </section>
 
   <div class="note" style="background:var(--card);color:var(--ink);border:1px solid var(--line)">Dopo la prova, <a href="valutazione.html"><b>lascia la tua valutazione</b></a>: un giudizio per ogni parte, da inviare con WhatsApp.</div>
 
   <section>
-    <h2>Cosa non c'è ancora</h2>
+    <h2>Nella versione vera</h2>
     <ul class="plain">
-      <li><b>Formula di tappa da confermare</b>: Tot. giudici = somma dei voti di tutti i giudici, capo compreso, nei due giri; i decimali risolvono le parità con il giudice capo e poi i giudici scelti per la gara (menu “Decimali per le parità”).</li>
-      <li><b>Archivio comune</b>: nella versione vera i dati stanno in un archivio unico (Supabase), con accesso del comitato, caricamento dei voti da parte dei giudici e classifica pubblica con il solo punteggio totale. I voti dei singoli giudici restano riservati.</li>
-      <li><b>Iscrizioni dal campo gara</b> e <b>pettorali delle coppie</b> assegnati dall'app.</li>
+      <li><b>Accesso riservato vero</b>: ogni membro di comitato e giuria con il suo accesso personale; il PIN della demo serve solo a mostrare i due livelli.</li>
+      <li><b>Archivio comune protetto</b>: il pubblico può solo leggere le classifiche pubblicate; i voti dei singoli giudici restano in un archivio non leggibile dal pubblico.</li>
+      <li><b>Sigillo di ogni scheda</b>: alla registrazione della foto il giudice riceve un codice; se un voto viene cambiato, il codice non torna e il giudice viene avvisato.</li>
     </ul>
   </section>
 
-  <footer>Demo generata da NWS Giuria · i nomi degli atleti sono inventati.</footer>
+  <footer>Demo generata da NWS Giuria · nomi degli atleti inventati · risultati simulati.</footer>
 </main>
 </body>
 </html>

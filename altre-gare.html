@@ -1,0 +1,18 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Altre gare · NW Style 2027 demo</title>
+<style>body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#f3f4f1;color:#16181a}main{max-width:900px;margin:0 auto;padding:24px 16px}
+h1{font-size:30px;margin:0 0 4px}.sub{color:#5d646b;margin:0 0 18px}.card{background:#fff;border:1px solid #dcdfdb;border-radius:12px;padding:14px;margin-bottom:14px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #e6e6e6;padding:6px;text-align:left;vertical-align:top}th{font-size:12px;color:#5d646b}
+.pill{font-size:12px;background:#fff1d6;color:#8a5a00;border-radius:99px;padding:1px 8px}.ban{background:#fff4d6;color:#5c4100;padding:8px 14px;border-radius:10px;font-size:14px;margin-bottom:16px}a{color:#c8322a}</style></head>
+<body><main><div class="ban"><b>DEMO 2027 · risultati simulati</b> · nomi inventati · <a href="./">presentazione</a> · <a href="classifiche/?public=1">classifiche del circuito</a></div>
+<h1>Altre gare</h1><p class="sub">Gare Style fuori classifica (staffetta e altre): classifica propria, nessun punto per il circuito. Sola lettura.</p><div id="out"></div></main>
+<script src="demo-db.js"></script><script>
+var d = NWSDemoDB.get(), A = Object.values(d.altre || {}), esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+document.getElementById('out').innerHTML = A.length ? A.map(function(g){
+  var h = '<div class="card"><h2 style="margin:0 0 8px">' + esc(g.tappa) + ' <small style="color:#5d646b;font-weight:400">' + esc(g.data) + '</small></h2>';
+  if (g.squadre) h += '<table><tr><th>Pos.</th><th>Squadra</th><th>ASD</th><th>Componenti</th><th style="text-align:right">Totale</th></tr>' + g.squadre.map(function(r){
+    return '<tr><td><b>' + r.pos + '</b></td><td><b>' + esc(r.nome) + '</b>' + (r.incompleta ? ' <span class="pill">incompleta</span>' : '') + '</td><td>' + esc(r.assoc) + '</td><td><small>' +
+      r.membri.map(function(m){ return esc(m.nome) + ' ' + (m.tot == null ? 'ASS' : m.tot); }).join('<br>') + '</small></td><td style="text-align:right"><b>' + r.tot + '</b></td></tr>'; }).join('') + '</table>';
+  (g.cats || []).forEach(function(c){ h += '<h3>' + esc(c[0]) + '</h3><table>' + c[1].map(function(r){ return '<tr><td>' + r.pos + '</td><td>' + esc(r.nome) + '</td><td>' + esc(r.assoc) + '</td><td style="text-align:right">' + r.tot + '</td></tr>'; }).join('') + '</table>'; });
+  return h + '</div>'; }).join('') : '<div class="card">Nessuna gara pubblicata. Nella demo: area giuria → gara "Vicenza · Staffetta" → classifica → Pubblica in "Altre gare".</div>';
+</script></body></html>

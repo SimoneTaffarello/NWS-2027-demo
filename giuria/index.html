@@ -46,6 +46,17 @@ table.res td.n{font-weight:700}
 .drop{border:2px dashed #bbb;border-radius:12px;padding:24px;text-align:center;color:var(--mute)}
 .list .it{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
 .digits{display:flex;gap:2px}.digits img{height:26px;border:1px solid #ccc;border-radius:3px;background:#fff}
+.pst{width:100%;border-collapse:collapse;font-size:13px}
+.pst th{font-size:11px;color:var(--mute);font-weight:600;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.pst td{padding:5px 6px;border-bottom:1px solid #eee;vertical-align:middle}
+.pst td.g{font-weight:800;white-space:nowrap}
+.pst tr.mx td{background:#f6f1ff}
+.pst .and{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.pst .and select,.pst .and input{width:auto;min-width:150px;max-width:270px;padding:5px 8px;font-size:13px}
+.pst td select.sw{width:auto;padding:5px 8px;font-size:13px}
+.pst .mini{border:1px solid #ccc;background:#fff;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px}
+.pst .mini:disabled{opacity:.3;cursor:default}
+.pst .sep{color:var(--mute);font-size:12px}
 #log{font-size:12px;color:var(--mute);white-space:pre-wrap}
 #printArea{display:none}
 @media print{
@@ -60,12 +71,17 @@ table.res td.n{font-weight:700}
 <script src="../demo-db.js"></script>
 <script>
 window.NWS_CIRCUITO = {
-  stages: [{"id": "demo-mestre", "name": "Mestre (demo)", "code": "MES27", "data": "12/09/2027"}, {"id": "demo-padova", "name": "Padova (demo)", "code": "PAD27", "data": "16/05/2027"}],
-  link: '../classifiche/',
+  /* tappe: quelle del calendario 2027 già dentro l'app; si parte da Bosisio */
+  defaultStage: "bosisio",
+  postazioni: {"custom": false, "rows": [{"a": ["Alternato"], "c": [false], "mix": false, "sw": 2}, {"a": ["3 passi in alternato con appoggio + 3 con bastoncini sospesi"], "c": [false], "mix": false, "sw": 1}, {"a": ["Parallelo a 2"], "c": [false], "mix": false, "sw": 4}, {"a": ["Parallelo a 3"], "c": [false], "mix": false, "sw": 3}, {"a": ["3 passi alternati + 1 parallelo a 2", "Parallelo a 3 con bastoncini sospesi"], "c": [false, false], "mix": true, "sw": 6}, {"a": ["1 parallelo a 2 + 3 passi in monobraccio", "Alternato con bastoncini sospesi"], "c": [false, false], "mix": true, "sw": 5}]},
+  link: '../classifiche/?public=1',
+  linkAltre: '../altre-gare.html',
+  /* gare fuori classifica (staffetta e simili): sezione pubblica a parte, senza punti di circuito */
+  publishAltre: function(g){ var d = NWSDemoDB.get(); d.altre = d.altre || {}; g.saved_at = new Date().toISOString(); d.altre[g.code] = g; NWSDemoDB.save(d); },
   /* archivio di confronto per il controllo nomi e ASD: atleti e ASD già nelle classifiche demo */
   riferimenti: function(){
-    var d = NWSDemoDB.get(), atl = [], asd = {};
-    Object.keys(d.risultati || {}).forEach(function(k){ (d.risultati[k].rows || []).forEach(function(x){ if (x.cognome) atl.push({cognome: x.cognome, nome: x.nome || ''}); if (x.assoc) asd[x.assoc] = 1; }); });
+    var d = NWSDemoDB.get(), atl = [], asd = {}, cap = function(s){ return String(s || '').toLowerCase().replace(/(^|[\s'-])\S/g, function(c){ return c.toUpperCase(); }); };
+    Object.keys(d.risultati || {}).forEach(function(k){ (d.risultati[k].rows || []).forEach(function(x){ if (x.cognome) atl.push({cognome: cap(x.cognome), nome: cap(x.nome)}); if (x.assoc) asd[x.assoc] = 1; }); });
     Object.keys(d.asd_circuiti || {}).forEach(function(k){ var a = d.asd_circuiti[k]; asd[a.nome_canonico || a.asd_name] = 1; });
     return {atleti: atl, asd: Object.keys(asd)};
   },
@@ -82,7 +98,21 @@ window.NWS_CIRCUITO = {
 </script>
 </head>
 <body>
-<header><b>NWS GIURIA</b><span>demo 2027 per il comitato · <a href="../" style="color:#fff">presentazione</a> · <a href="../classifiche/" style="color:#fff">classifiche</a></span></header>
+<div id="pin-gate" style="position:fixed;inset:0;z-index:99;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif">
+<form style="background:#1d1d1d;padding:24px;border-radius:14px;max-width:340px;width:90%" onsubmit="return nwsPin(event)">
+<div style="font-size:12px;letter-spacing:.1em;opacity:.7">NW STYLE 2027 · DEMO</div>
+<h2 style="margin:6px 0 4px">Area giuria</h2>
+<p style="opacity:.8;font-size:14px;margin:0 0 14px">Accesso riservato a comitato e giuria. Nella demo il PIN è <b>2027</b>; nella versione vera ognuno ha il suo accesso personale.</p>
+<input id="pin-in" inputmode="numeric" autocomplete="off" placeholder="PIN" style="width:100%;padding:10px;border-radius:8px;border:0;font-size:18px">
+<p id="pin-err" style="color:#ff8a80;font-size:13px;min-height:1em;margin:8px 0"></p>
+<button style="width:100%;padding:10px;border:0;border-radius:8px;background:#c0392b;color:#fff;font-size:15px">Entra</button>
+<p style="font-size:13px;margin:12px 0 0"><a href="../classifiche/?public=1" style="color:#ffb3ab">Vai alla classifica pubblica →</a></p>
+</form></div>
+<script>
+function nwsPin(e){ e.preventDefault(); if (document.getElementById('pin-in').value.trim() === '2027'){ try { sessionStorage.setItem('nws2027demo_pin', '1'); } catch(x){} document.getElementById('pin-gate').remove(); } else document.getElementById('pin-err').textContent = 'PIN non corretto'; return false; }
+try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElementById('pin-gate').remove(); } catch(x){}
+</script>
+<header><b>NWS GIURIA</b><span>demo 2027 · area riservata · <a href="../" style="color:#fff">presentazione</a> · <a href="../classifiche/?public=1" style="color:#fff">classifica pubblica</a></span></header>
 <nav id="nav">
   <button data-t="gara" class="on">1 · Gara e schede</button>
   <button data-t="leggi">2 · Leggi schede</button>
@@ -94,21 +124,50 @@ window.NWS_CIRCUITO = {
   <div class="card">
     <h2>Dati gara</h2>
     <div class="grid">
-      <div><label>Tappa</label><input id="g-tappa" value="Mestre"></div>
-      <div><label>Codice gara (lettere/numeri)</label><input id="g-code" value="MES26" maxlength="8"></div>
-      <div><label>Data</label><input id="g-data" value="12/09/2026"></div>
+      <div id="g-stage-box" hidden style="grid-column:1/-1"><label for="g-stage">Gara del calendario 2027</label>
+        <div class="row"><select id="g-stage" style="width:auto;flex:1;min-width:240px"></select><button class="btn sec" type="button" id="b-new-gara">+ Nuova gara</button></div>
+        <div id="new-gara" class="row" hidden style="margin-top:6px">
+          <input id="ng-nome" placeholder="Nome e luogo (es. Esibizione Treviso)" style="width:auto;flex:2;min-width:200px">
+          <input id="ng-data" placeholder="Data gg/mm/aaaa" style="width:150px">
+          <input id="ng-code" placeholder="Codice (es. TVX27)" maxlength="8" style="width:140px">
+          <label style="display:inline-flex;gap:4px;align-items:center;margin:0;color:var(--ink)"><input type="checkbox" id="ng-sq" style="width:auto"> a squadre</label>
+          <button class="btn" type="button" id="b-ng-ok">Aggiungi</button>
+        </div>
+        <p class="hint" id="ng-info">Le gare aggiunte sono fuori classifica: hanno la loro classifica e non danno punti al circuito.</p></div>
+      <div><label>Tappa</label><input id="g-tappa" value=""></div>
+      <div><label>Codice gara (lettere/numeri)</label><input id="g-code" value="" maxlength="8"></div>
+      <div><label>Data</label><input id="g-data" value=""></div>
+      <div><label for="g-tipo">Tipo di gara</label><select id="g-tipo"><option value="circuito">Tappa di circuito</option><option value="fuori">Fuori classifica</option></select></div>
+      <div><label for="g-squadre">Classifica</label><select id="g-squadre"><option value="">individuale e coppie</option><option value="1">solo squadre (staffetta)</option></select></div>
+      <div id="sq-box" hidden style="grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:10px">
+        <div class="row">
+          <label for="g-pettsq" style="margin:0">Pettorali</label><select id="g-pettsq" style="width:auto"><option value="squadra">uno per squadra (12·1 … 12·4)</option><option value="atleta">uno per atleta</option></select>
+          <label for="g-asdmix" style="margin:0">ASD diverse nella stessa squadra</label><select id="g-asdmix" style="width:auto"><option value="">non ammesse (avviso)</option><option value="1">ammesse</option></select>
+        </div>
+        <div class="row" style="margin-top:8px"><span class="hint" style="margin:0">Pari merito tra squadre, in quest'ordine:</span>
+          <select id="g-pari0" style="width:auto"></select><select id="g-pari1" style="width:auto"></select><select id="g-pari2" style="width:auto"></select></div>
+        <p class="hint">Totale squadra = somma dei Tot. giudici dei suoi 4 componenti (1 istruttore e 3 camminatori). Nel file iscritti serve la colonna SQUADRA; la squadra si forma con le righe che hanno lo stesso nome.</p>
+      </div>
       <div><label>Giudici di campo</label><input id="g-ng" type="number" min="1" max="12" value="6"></div>
       <div><label>Giudici capo</label><input id="g-nc" type="number" min="1" max="3" value="1"></div>
       <div style="grid-column:1/-1"><label>Decimali per le parità (in quest'ordine)</label>
         <div class="row" id="g-dec"><span class="pill">1° Giudice capo · totale</span></div>
         <p class="hint">Punti = somma di tutti i giudici, poi a coppie di cifre il capo e i giudici scelti: es. 87,351412. Il criterio non compare in classifica.</p></div>
-      <div id="g-stage-box" hidden><label for="g-stage">Tappa del circuito</label><select id="g-stage"></select></div>
       <div><label>Scheda giudici di campo</label><select id="g-var"><option value="B">B · zone (un cerchio per zona)</option><option value="A">A · elementi (1 punto ciascuno, con totale scritto)</option></select></div>
     </div>
     <div class="grid" style="margin-top:12px">
-      <div style="grid-column:1/-1"><label>Prove (una per riga, nell'ordine delle postazioni 1, 2, 3…)</label>
-        <textarea id="g-prove" style="min-height:120px"></textarea>
-        <p class="hint">Rotazione: il giudice della postazione 1 nel 2° giro passa alla 2 e viceversa; 3↔4, 5↔6, 7↔8.</p></div>
+      <div style="grid-column:1/-1"><label>Postazioni del percorso e giudici di campo (in ordine di percorso: la riga 1 è la postazione 1, giudice G1)</label>
+        <div class="row" style="margin-bottom:6px">
+          <button class="btn sec" type="button" id="b-mod-tappa">Modello tappa 2027</button>
+          <button class="btn sec" type="button" id="b-mod-fin">Modello Finalissima 2027</button>
+          <button class="btn sec" type="button" id="b-post-add">+ Postazione</button>
+          <button class="btn sec" type="button" id="b-post-auto">Scambi automatici</button>
+        </div>
+        <div style="overflow-x:auto"><table class="pst" id="post-tab"></table></div>
+        <textarea id="g-post" hidden></textarea>
+        <p class="hint" id="post-info"></p>
+        <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Riepilogo per il briefing dei giudici</summary><div id="post-sum"></div></details></div>
+      <div><label for="g-scarto">Voto più alto e più basso</label><select id="g-scarto"><option value="">si contano tutti i voti</option><option value="1">si scartano (giudici di campo, per giro)</option></select></div>
       <div style="grid-column:1/-1"><label>Sezioni di gara: <code>TIPO | Nome | pettorali</code> · TIPO = IND (individuale) o COP (coppie)</label>
         <textarea id="g-sez"></textarea>
         <p class="hint">Individuale: <code>IND | Gruppo 1 | 1-25</code>. Coppie, con la categoria: <code>COP | Coppie | 151-160 CC, 161-170 CI, 171-176 II</code> (C = camminatrici e camminatori, I = istruttori e istruttrici; MIX = CI). Ogni 25 pettorali si crea un nuovo foglio.</p></div>
@@ -210,7 +269,7 @@ window.NWS_CIRCUITO = {
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 'use strict';
-const VERSION = '0.5.8';
+const VERSION = '0.6.0';
 document.getElementById('ver').textContent = VERSION;
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
 
@@ -318,7 +377,7 @@ function sheetSVG(sh){
   o.push(`<rect width="${G.W}" height="${G.H}" fill="#fff"/>`);
   G.FIDP.forEach(([x,y]) => o.push(`<rect x="${x}" y="${y}" width="${G.FID}" height="${G.FID}" fill="#000"/>`));
   // testata
-  o.push(txt(13, 7.2, 'NORDIC WALKING STYLE · CIRCUITO 2026 · v' + VERSION, {fs:1.8, fill:'#555', ls:.15}));
+  o.push(txt(13, 7.2, 'NORDIC WALKING STYLE · CIRCUITO ' + (sh.anno || new Date().getFullYear()) + ' · v' + VERSION, {fs:1.8, fill:'#555', ls:.15}));
   o.push(txt(13, 11.6, sh.title, {fs:3.6, fw:800, fill:'#c0392b'}));
   o.push(txt(13, 15.6, sh.subtitle, {fs:2.2, fw:700}));
   const meta = sh.meta; let mx = 80;   // dopo il titolo più lungo (GIUDICE DI CAMPO · COPPIE)
@@ -347,7 +406,9 @@ function sheetSVG(sh){
     o.push(`<rect x="${x0}" y="${G.TY}" width="${G.GW}" height="${G.H1}" fill="#111"/>`);
     const gt = sh.kind === 'campo' ? `${g+1}° GIRO · POSTAZIONE ${g ? sh.post2 : sh.post1}` : `${g+1}° GIRO`;
     const gs = sh.kind === 'campo' ? ` · Prova: ${g ? sh.prova2 : sh.prova1}` : ' · Gesto tecnico complessivo nella tecnica alternata';
-    o.push(`<text x="${x0+G.GW/2}" y="${G.TY+3.3}" font-size="2.5" fill="#fff" text-anchor="middle"><tspan font-weight="800">${esc(gt)}</tspan><tspan font-size="2.1">${esc(gs)}</tspan></text>`);
+    // testo lungo (mix con più andature): si riduce il carattere per restare nella fascia
+    const fk = Math.min(1, (G.GW - 3) / (gt.length * 2.5 * .62 + gs.length * 2.1 * .54));
+    o.push(`<text x="${x0+G.GW/2}" y="${G.TY+3.3}" font-size="${(2.5*fk).toFixed(2)}" fill="#fff" text-anchor="middle"><tspan font-weight="800">${esc(gt)}</tspan><tspan font-size="${(2.1*fk).toFixed(2)}">${esc(gs)}</tspan></text>`);
     // fascia zone
     const zy = G.TY + G.H1;
     const spans = [];
@@ -421,7 +482,7 @@ function sheetSVG(sh){
     }
     if (r % 2) o.push(`<rect x="${G.TX}" y="${y}" width="${G.TW}" height="${G.RH}" fill="#f1f1f1"/>`);   // righe alterne, per seguire la riga
     [G.TX, p2x].forEach(px => {
-      o.push(txt(px + (ind ? G.PB/2 : 5), y + 4.4, row.p, {fs:3.7, fw:800, a:'middle'}));
+      o.push(txt(px + (ind ? G.PB/2 : 5), y + 4.4, row.lab || row.p, {fs: row.lab ? 3.3 : 3.7, fw:800, a:'middle'}));
       if (!ind) o.push(txt(px + G.FIX[0] + G.FIX[1]/2, y + 4, catLabel(row.cat || ''), {fs:1.9, fill:'#444', a:'middle'}));
     });
   }
@@ -521,6 +582,9 @@ function atlTable(txtv){
   return {head, rows: body.map(split)};
 }
 const PETT_RE = /^(pett|n\.?$|n°|num|bib)/i;
+// colonna dell'ASD: "SQUADRA" vale come ASD solo se non c'è una colonna ASD e la gara non è a squadre
+const ASD_RE = /asd|societ|club/i;
+const asdCol = H => { const i = H.findIndex(h => ASD_RE.test(h)); return i >= 0 || v('g-squadre') === '1' ? i : H.findIndex(h => /^squadra/i.test(h)); };
 function parseAtleti(txtv, colP, colC){
   const T = atlTable(txtv);
   if (!T) return null;
@@ -631,6 +695,55 @@ function assignBibs(confirmed){
     copMsg +
     (g1n > cap1 ? ` · il Gruppo 1 sfora nella 3ª manche` : '') + (sizes.some(m => m + (m === sizes[sizes.length-1] ? ris.length : 0) > G.NR) ? ` · le manche oltre ${G.NR} righe si stampano su due fogli` : '');
 }
+/* staffetta: le righe con lo stesso nome nella colonna SQUADRA formano una squadra (di norma 1 istruttore + 3 camminatori).
+   Pettorale unico per squadra: ogni componente è una riga della scheda, 12·1 … 12·4 (frazioni nell'ordine del file);
+   pettorale per atleta: numeri consecutivi, squadra dopo squadra. Le manche contengono squadre intere. */
+function assignTeams(confirmed){
+  const T = atlTable(v('g-atl'));
+  if (!T || !T.rows.length) throw new Error('carica prima l\'elenco degli atleti');
+  let H = T.head; const find = re => H.findIndex(h => re.test(h));
+  // si ripulisce un'assegnazione precedente
+  ['N. riga', 'Pettorale squadra', 'Frazione'].forEach(n => { const i = H.indexOf(n); if (i >= 0){ H.splice(i, 1); T.rows.forEach(r => r.splice(i, 1)); } });
+  const isq = find(/^squadra/i);
+  if (isq < 0) throw new Error('nel file manca la colonna SQUADRA: serve per formare le squadre della staffetta');
+  const ic = find(/^cognome/i), inn = find(/^nome/i), icat = find(/^cat/i), ia = asdCol(H);
+  const nm = r => `${r[ic] || ''} ${r[inn] || ''}`.trim();
+  const senza = T.rows.filter(r => !String(r[isq] || '').trim());
+  if (senza.length) throw new Error(`${senza.length} atleti senza squadra (${senza.slice(0, 3).map(nm).join(', ')}): completa la colonna SQUADRA e ricarica`);
+  const teams = [], by = {};
+  T.rows.forEach(r => { const k = String(r[isq]).trim(); if (!by[k]) teams.push(by[k] = {nome: k, rows: []}); by[k].rows.push(r); });
+  const note = [];
+  teams.forEach(t => {
+    const ni = t.rows.filter(r => oneCat(r[icat]) === 'I').length, nc = t.rows.filter(r => oneCat(r[icat]) === 'C').length;
+    if (t.rows.length !== 4 || ni !== 1 || nc !== 3) note.push(`squadra ${t.nome}: ${t.rows.length} atleti (${ni} istruttori, ${nc} camminatori) invece di 1 istruttore e 3 camminatori`);
+    const asd = [...new Set(t.rows.map(r => ia >= 0 ? String(r[ia] || '').trim() : '').filter(Boolean))];
+    if (asd.length > 1 && v('g-asdmix') !== '1') note.push(`squadra ${t.nome}: atleti di ASD diverse (${asd.join(', ')})`);
+  });
+  if (note.length && !confirmed) return {ask: note};
+  teams.sort((a, b) => a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
+  const perSq = v('g-pettsq') !== 'atleta', p1 = Math.max(1, +v('g-p1') || 1);
+  H.unshift('N. riga', 'Pettorale squadra', 'Frazione'); T.rows.forEach(r => r.unshift('', '', ''));
+  const ip = !perSq ? find(/^pettorale$/i) : -1;
+  if (!perSq && ip < 0) H[0] = 'Pettorale';
+  let n = p1;
+  const out = [];
+  teams.forEach((t, ti) => t.rows.forEach((r, k) => {
+    const row = n++; r[0] = String(row);
+    if (perSq){ r[1] = String(p1 + ti); r[2] = String(k + 1); } else if (ip >= 0) r[ip] = String(row);
+    out.push(r);
+  }));
+  // manche: squadre intere, quante ne stanno nelle righe della manche
+  const perM = Math.max(1, Math.floor((+v('g-man') || 24) / 4)), sez = [];
+  for (let i = 0, m = 1; i < teams.length; i += perM, m++){
+    const rr = teams.slice(i, i + perM).flatMap(t => t.rows.map(r => +r[0]));
+    sez.push(`IND | Manche ${m} | ${ranges(rr).join(', ')}`);
+  }
+  if (!perSq){ H.splice(1, 2); out.forEach(r => r.splice(1, 2)); }
+  $('g-atl').value = [H].concat(out).map(r => r.join('\t')).join('\n'); $('g-sez').value = sez.join('\n');
+  atlPreview(); $('g-colp').value = '0'; atlPreview();
+  return `${teams.length} squadre · ${out.length} atleti · ${sez.length} manche da ${perM} squadre` +
+    (perSq ? ` · pettorali squadra ${p1}–${p1 + teams.length - 1}, frazioni 1–4 nell'ordine del file` : ` · pettorali ${p1}–${n - 1}`);
+}
 /* decimali per le parità: capo sempre primo, poi fino a 4 giudici a scelta (totale, solo 1° o solo 2° giro) */
 const NDEC = 4, DEC_GIRO = [['tot', 'totale'], ['1', 'solo 1° giro'], ['2', 'solo 2° giro']];
 function renderDec(){
@@ -654,7 +767,9 @@ function readGara(){
     const x = A && A.byP[a.p];
     if (x && sec.type === 'IND' && x.cats.length > 1) throw new Error(`Pettorale ${a.p} assegnato a ${x.cats.length} atleti (${x.nome}): ogni atleta deve avere il suo`);
     if (x && sec.type !== 'IND' && x.cats.length > 2) throw new Error(`Pettorale ${a.p}: ${x.cats.length} atleti per una coppia (${x.nome})`);
-    if (x){ a.nome = x.nome; a.campi = x.campi; }
+    if (x){ a.nome = x.nome; a.campi = x.campi;
+      const ps = campo(x, /^pettorale squadra/i), fr = campo(x, /^frazione/i);
+      if (ps && fr) a.lab = `${ps}·${fr}`; }
     if (sec.type === 'IND'){ if (x && x.cat) a.cat = x.cat; return; }
     // coppia su due righe: la categoria nasce dai due atleti (Camminatore + Istruttrice = C/I)
     const two = x && x.cats.length === 2 && x.cats.every(oneCat) ? coupleCat(x.cats.map(oneCat).sort().join('')) : '';
@@ -666,8 +781,13 @@ function readGara(){
   }));
   return {
     tappa: v('g-tappa'), code: v('g-code').toUpperCase().replace(/[^A-Z0-9]/g,''), data: v('g-data'),
-    ng: Math.max(1, +v('g-ng')||6), nc: Math.max(1, +v('g-nc')||1), varCampo: v('g-var') === 'B' ? 'B' : 'A',
-    prove: v('g-prove').split('\n').map(s=>s.trim()).filter(Boolean),
+    ng: POST.rows.length, nc: Math.max(1, +v('g-nc')||1), varCampo: v('g-var') === 'B' ? 'B' : 'A',
+    postazioni: POST.rows.map((r, i) => ({and: r.a.slice(), mix: !!r.mix, sw: r.sw, label: postLabel(POST.rows, i)})),
+    scarto: v('g-scarto') === '1',
+    tipo: v('g-tipo') === 'fuori' ? 'fuori' : 'circuito', squadre: v('g-squadre') === '1',
+    pettsq: v('g-pettsq') === 'atleta' ? 'atleta' : 'squadra', asdmix: v('g-asdmix') === '1',
+    pari: [0, 1, 2].map(i => v('g-pari' + i)).filter(Boolean),
+    anno: (/(20\d\d)/.exec(v('g-data')) || [])[1] || '',
     stage: v('g-stage') || '',
     decimali: readDec(),
     sezioni
@@ -677,7 +797,7 @@ function buildSheets(gara){
   const sheets = [];
   gara.sezioni.forEach(sec => {
     const fogli = []; for (let i = 0; i < sec.atl.length; i += G.NR) fogli.push(sec.atl.slice(i, i+G.NR));
-    const tipoLab = sec.type === 'IND' ? 'Individuale' : 'Coppie';
+    const tipoLab = gara.squadre ? 'Staffetta' : sec.type === 'IND' ? 'Individuale' : 'Coppie';
     fogli.forEach((rows, fi) => {
       const p1 = rows[0].p, p2 = rows[rows.length-1].p;
       const gara1 = `${tipoLab} · ${sec.nome}${fogli.length > 1 ? ` · foglio ${fi+1}/${fogli.length}` : ''}`;
@@ -685,18 +805,20 @@ function buildSheets(gara){
       const sync = sec.type !== 'IND' ? ' · sincronia: un solo voto' : '', corr = ' · correzione: X sul cerchio sbagliato';
       const vB = gara.varCampo === 'B';
       for (let j = 1; j <= gara.ng; j++){
-        const post1 = j, post2 = pairPost(j) <= gara.ng ? pairPost(j) : j;
+        // postazioni della gara (scambi scelti); vecchie gare e collaudi: lista prove con 1↔2, 3↔4…
+        const P = gara.postazioni, post1 = j, post2 = P ? P[j-1].sw : (pairPost(j) <= gara.ng ? pairPost(j) : j);
+        const prova = k => P ? P[k-1].label : (gara.prove || [])[k-1] || `Prova ${k}`;
         const sec2 = `${sec.idx}${sec.type}`;
         sheets.push({kind:'campo', type:sec.type, judge:'G'+j, variant: vB ? 'B' : 'A', sec:sec.idx, foglio:fi+1, rows,
           title: sec.type === 'IND' ? 'GIUDICE DI CAMPO' : 'GIUDICE DI CAMPO · COPPIE', subtitle: `Giudice G${j}` + (vB ? ' · scheda a zone' : ''),
-          post1, post2, prova1: gara.prove[post1-1] || `Prova ${post1}`, prova2: gara.prove[post2-1] || `Prova ${post2}`,
+          post1, post2, prova1: prova(post1), prova2: prova(post2), anno: gara.anno,
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice', '', 58]],
           ins: vB ? 'Pennarello nero · un cerchio per zona' + sync + corr :
                'Pennarello nero · un cerchio per elemento corretto · totale a due cifre (08)' + sync + corr,
           payload: makePayload(gara.code, sec2, 'G'+j+(vB ? 'B' : ''), fi+1, p1, p2)});
       }
       for (let c = 1; c <= gara.nc; c++){
-        sheets.push({kind:'capo', type:sec.type, judge:'C'+c, sec:sec.idx, foglio:fi+1, rows,
+        sheets.push({kind:'capo', type:sec.type, judge:'C'+c, sec:sec.idx, foglio:fi+1, rows, anno: gara.anno,
           title: sec.type === 'IND' ? 'GIUDICE CAPO' : 'GIUDICE CAPO · COPPIE', subtitle: gara.nc > 1 ? `Giudice capo ${c}` : 'Giudice capo',
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice capo', '', 58]],
           ins: 'Pennarello nero · un solo voto per giro' + sync + corr,
@@ -709,28 +831,211 @@ function buildSheets(gara){
 
 /* ======================= UI: GARA ======================= */
 const $ = id => document.getElementById(id), v = id => $(id).value;
-const DEF_PROVE = ['1 Parallelo a 3 + 3 monobraccio','P3 sospeso + P2 + alternato sospeso','Prova 3','Prova 4','Prova 5','Prova 6','Prova 7','Prova 8'];
+/* ======================= POSTAZIONI E SCAMBI DEI GIUDICI DI CAMPO =======================
+   Ogni riga è una postazione del percorso, in ordine: riga 1 = postazione 1 = giudice G1.
+   sw = postazione dove il giudice passa al 2° giro (il suo "gemello"); sw uguale a sé = resta fermo.
+   Andature dal regolamento 2027 (menù a tendina) oppure "altra" scritta a mano. */
+// andature del regolamento 2027 (art. 4): le stesse per tutte le prove, perché un alternato, un parallelo a 2 o a 3
+// può essere anche un'andatura composta che lo contiene (es. 3 passi alternati + 1 parallelo a 3)
+const AND_MIX = ['Parallelo a 2', 'Parallelo a 3', '1 parallelo a 3 + 1 parallelo a 2', '3 passi alternati + 1 parallelo a 2',
+  '3 passi alternati + 1 parallelo a 3', 'Alternato con bastoncini sospesi', 'Parallelo a 3 con bastoncini sospesi',
+  '3 passi in alternato con appoggio + 3 con bastoncini sospesi', '3 passi in monobraccio + 2 in monobraccio', '1 parallelo a 2 + 3 passi in monobraccio'];
+const AND_SING = ['Alternato'].concat(AND_MIX);
+const POST_MODELLI = {
+  tappa: {nc: 1, rows: [['Alternato'], ['Alternato'], ['Parallelo a 2'], ['Parallelo a 3'], ['', ''], ['', '']], mix: [4, 5]},
+  fin:   {nc: 2, rows: [['Alternato'], ['Alternato'], ['Parallelo a 2'], ['Parallelo a 3'],
+                        ['', ''], ['', ''], ['', ''], ['', '']], mix: [4, 5, 6, 7]}   // 8 giudici: 1ª mix G5-G6, 2ª mix G7-G8
+};
+let POST = {rows: [], custom: false}, genAsk = null;
+const postRow = (a, mix) => ({a: a.slice(), c: a.map(() => false), mix: !!mix, sw: 0});
+// scambi automatici: i giudici della mix tra loro (in ordine), gli altri a coppie per numero 1↔2, 3↔4… saltando la mix
+function postAuto(rows){
+  const pair = idx => { for (let k = 0; k < idx.length; k += 2){ const a = idx[k], b = idx[k+1];
+    if (b === undefined) rows[a].sw = a + 1; else { rows[a].sw = b + 1; rows[b].sw = a + 1; } } };
+  pair(rows.map((r, i) => r.mix ? i : -1).filter(i => i >= 0));
+  pair(rows.map((r, i) => r.mix ? -1 : i).filter(i => i >= 0));
+  return rows;
+}
+// dicitura della prova sulla scheda; nella mix, quali andature del tratto toccano a questo giudice
+function postLabel(rows, i){
+  const r = rows[i], a = r.a.filter(Boolean);
+  if (!r.mix) return a.join(' + ') || `Prova ${i+1}`;
+  const j = r.sw - 1, pre = rows[j] && j !== i && rows[j].mix && j < i ? rows[j].a.filter(Boolean).length : 0;
+  // andature numerate secondo la posizione nel tratto mix (il compagno con la riga più in alto ha le prime)
+  return 'Mix: ' + a.map((x, k) => `${pre + k + 1}) ${x}`).join(' · ');
+}
+// controlli: errori bloccano la stampa, avvisi chiedono conferma
+function postCheck(rows){
+  const err = [], warn = [], n = rows.length;
+  if (!n) err.push('Inserisci almeno una postazione');
+  rows.forEach((r, i) => {
+    const G = `G${i+1} (postazione ${i+1})`;
+    if (!r.a.length || r.a.some(x => !String(x).trim())) err.push(`${G}: scegli ${r.mix ? 'tutte le andature della mix' : "l'andatura"}`);
+    const j = r.sw - 1;
+    if (!(j >= 0 && j < n) || rows[j].sw - 1 !== i) err.push(`${G}: scambio non valido, ricontrolla la colonna "Al 2° giro"`);
+    else if (j === i) warn.push(`${G} resta sulla stessa postazione anche al 2° giro`);
+    else if (r.mix !== rows[j].mix && i < j) warn.push(`G${i+1} e G${j+1} si scambiano, ma solo uno dei due valuta la mix`);
+    if (r.mix && r.a.length !== 2) warn.push(`${G}: la mix ha ${r.a.length} andatur${r.a.length === 1 ? 'a' : 'e'} per questo giudice (di norma 2)`);
+  });
+  return {err, warn};
+}
+function postSave(){ $('g-post').value = JSON.stringify(POST); genAsk = null; $('b-gen').textContent = 'Genera schede'; }
+function postChanged(){ if (!POST.custom) postAuto(POST.rows); postSave(); renderPost(); saveForm(); }
+function postLoad(json){
+  let o = null; try { o = JSON.parse(json || ''); } catch(e){}
+  if (o && Array.isArray(o.rows) && o.rows.length) POST = o;
+  else if (window.NWS_CIRCUITO && NWS_CIRCUITO.postazioni){ POST = JSON.parse(JSON.stringify(NWS_CIRCUITO.postazioni)); postSave(); }
+  else postModello('tappa', true);
+  renderPost();
+}
+function postModello(k, quiet){
+  const M = POST_MODELLI[k];
+  POST = {rows: M.rows.map((a, i) => postRow(a, M.mix.includes(i))), custom: false};
+  postAuto(POST.rows); $('g-nc').value = M.nc; postSave();
+  if (!quiet){ renderPost(); saveForm(); }
+}
+function postResize(n){
+  n = Math.min(12, Math.max(1, n || 1));
+  while (POST.rows.length < n){ const r = postRow([''], false); r.sw = POST.rows.length + 1; POST.rows.push(r); }
+  while (POST.rows.length > n) postRemove(POST.rows.length - 1, true);
+  postChanged();
+}
+function postRemove(i, quiet){
+  const j = POST.rows[i].sw - 1; if (j !== i && POST.rows[j]) POST.rows[j].sw = j + 1;
+  POST.rows.splice(i, 1);
+  POST.rows.forEach(r => { if (r.sw - 1 > i) r.sw--; });
+  if (!quiet) postChanged();
+}
+function postMove(i, d){
+  const k = i + d, R = POST.rows; if (k < 0 || k >= R.length) return;
+  [R[i], R[k]] = [R[k], R[i]];
+  R.forEach(r => { if (r.sw - 1 === i) r.sw = k + 1; else if (r.sw - 1 === k) r.sw = i + 1; });   // i gemelli seguono la riga
+  postChanged();
+}
+// scambio scelto a mano: vale nei due sensi, i vecchi compagni restano liberi (fermi) finché non li abbini
+function postSwap(i, j){
+  const R = POST.rows, oi = R[i].sw - 1, oj = R[j].sw - 1;
+  if (R[oi]) R[oi].sw = oi + 1; if (R[oj]) R[oj].sw = oj + 1;
+  R[i].sw = j + 1; R[j].sw = i + 1;
+  POST.custom = true; postSave(); renderPost(); saveForm();
+}
+function andSelect(r, i, k){
+  const list = r.mix ? AND_MIX : AND_SING, val = r.a[k] || '';
+  if (r.c[k] || (val && !list.includes(val)))
+    return `<input data-i="${i}" data-k="${k}" class="and-txt" value="${esc(val)}" placeholder="andatura (scritta a mano)"><button type="button" class="mini and-list" data-i="${i}" data-k="${k}" title="torna all'elenco">☰</button>`;
+  return `<select data-i="${i}" data-k="${k}" class="and-sel"><option value="">— scegli —</option>${list.map(x => `<option${x === val ? ' selected' : ''}>${esc(x)}</option>`).join('')}<option value="__altra">altra (scrivi)…</option></select>`;
+}
+function renderPost(){
+  const R = POST.rows, n = R.length;
+  $('g-ng').value = n; renderDec();
+  $('post-tab').innerHTML = '<tr><th>Giudice</th><th>Andatura</th><th>Mix</th><th>Al 2° giro passa a</th><th>Ordine</th><th></th></tr>' + R.map((r, i) =>
+    `<tr class="${r.mix ? 'mx' : ''}"><td class="g">G${i+1}</td>` +
+    `<td><div class="and">${r.a.map((_, k) => (k ? `<span class="sep">${r.mix ? '→' : '+'}</span>` : '') + andSelect(r, i, k)).join('')}` +
+      ` <button type="button" class="mini and-add" data-i="${i}" title="aggiungi un'andatura in sequenza">+</button><button type="button" class="mini and-del" data-i="${i}" title="togli l'ultima andatura"${r.a.length < 2 ? ' disabled' : ''}>−</button></div></td>` +
+    `<td><input type="checkbox" class="mix-chk" data-i="${i}"${r.mix ? ' checked' : ''} style="width:auto" title="il giudice valuta una parte della mix"></td>` +
+    `<td><select class="sw" data-i="${i}">${R.map((_, j) => `<option value="${j+1}"${r.sw === j+1 ? ' selected' : ''}>${j === i ? 'resta (G' + (i+1) + ')' : 'postazione ' + (j+1) + ' (G' + (j+1) + ')'}</option>`).join('')}</select></td>` +
+    `<td style="white-space:nowrap"><button type="button" class="mini mv" data-i="${i}" data-d="-1"${i ? '' : ' disabled'}>↑</button> <button type="button" class="mini mv" data-i="${i}" data-d="1"${i < n-1 ? '' : ' disabled'}>↓</button></td>` +
+    `<td><button type="button" class="mini rm" data-i="${i}" title="togli la postazione"${n > 1 ? '' : ' disabled'}>✕</button></td></tr>`).join('');
+  const ck = postCheck(R);
+  $('post-info').innerHTML = `${n} giudici di campo · scambi ${POST.custom ? '<b>scelti a mano</b>' : 'automatici (mix tra loro, gli altri 1↔2, 3↔4…)'}` +
+    ck.err.concat(ck.warn).map(t => '<br>⚠ ' + esc(t)).join('');
+  $('post-sum').innerHTML = '<table class="res"><tr><th>Giudice</th><th>1° giro</th><th>2° giro</th></tr>' + R.map((r, i) =>
+    `<tr><td class="n">G${i+1}</td><td>Postazione ${i+1} · ${esc(postLabel(R, i))}</td><td>Postazione ${r.sw} · ${esc(R[r.sw-1] ? postLabel(R, r.sw-1) : '?')}</td></tr>`).join('') + '</table>';
+}
+$('post-tab').addEventListener('change', e => {
+  const t = e.target, i = +t.dataset.i, r = POST.rows[i]; if (!r) return;
+  if (t.classList.contains('and-sel')){ const k = +t.dataset.k; if (t.value === '__altra'){ r.a[k] = ''; r.c[k] = true; } else r.a[k] = t.value; postSave(); renderPost(); saveForm(); }
+  else if (t.classList.contains('and-txt')){ r.a[+t.dataset.k] = t.value.trim(); postSave(); renderPost(); saveForm(); }
+  else if (t.classList.contains('mix-chk')){ r.mix = t.checked; r.a = r.mix ? ['', ''] : ['']; r.c = r.a.map(() => false); postChanged(); }
+  else if (t.classList.contains('sw')) postSwap(i, +t.value - 1);
+});
+$('post-tab').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  const i = +t.dataset.i, r = POST.rows[i];
+  if (t.classList.contains('mv')) postMove(i, +t.dataset.d);
+  else if (t.classList.contains('rm')) postRemove(i);
+  else if (t.classList.contains('and-add')){ r.a.push(''); r.c.push(false); postSave(); renderPost(); saveForm(); }
+  else if (t.classList.contains('and-del')){ r.a.pop(); r.c.pop(); postSave(); renderPost(); saveForm(); }
+  else if (t.classList.contains('and-list')){ const k = +t.dataset.k; r.c[k] = false; r.a[k] = ''; postSave(); renderPost(); saveForm(); }
+});
+$('b-mod-tappa').onclick = () => postModello('tappa');
+$('b-mod-fin').onclick = () => postModello('fin');
+$('b-post-add').onclick = () => postResize(POST.rows.length + 1);
+$('b-post-auto').onclick = () => { POST.custom = false; postChanged(); };
+
 const DEF_SEZ = 'IND | Gruppo 1 | 1-25\nCOP | Coppie | 151-160 CC, 161-170 CI, 171-176 II';
 function store(k, val){ try { localStorage.setItem('nwsg.'+k, JSON.stringify(val)); } catch(e){} }
 function load(k){ try { return JSON.parse(localStorage.getItem('nwsg.'+k)); } catch(e){ return null; } }
 let SHEETS = [], assignAsk = null;   // assignAsk: note in attesa di conferma per "Assegna pettorali"
-// versione collegata alle classifiche di circuito (demo): tappe del circuito e schede di esempio
-if (window.NWS_CIRCUITO){
-  $('g-stage-box').hidden = false; $('demo-box').hidden = false;
-  $('g-stage').innerHTML = NWS_CIRCUITO.stages.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
-  $('g-stage').onchange = () => { const t = NWS_CIRCUITO.stages.find(t => t.id === v('g-stage')); if (t){ $('g-tappa').value = t.name; $('g-code').value = t.code; $('g-data').value = t.data; } };
-  if (!load('form')) setTimeout(() => $('g-stage').onchange());   // prima apertura: dati della prima tappa
+/* calendario 2027 (locandine SINW): id uguali a quelli dell'app delle classifiche; la staffetta di Vicenza è fuori classifica */
+const CAL_2027 = [
+  {id:'vicenza-staffetta', name:'Vicenza', code:'VIC27', data:'14/03/2027', lab:'Staffetta nazionale a squadre · fuori classifica', tipo:'fuori', squadre:true},
+  {id:'torino', name:'Torino', code:'TOR27', data:'21/03/2027', lab:'Nord · gara 1'},
+  {id:'catania', name:'Catania', code:'CAT27', data:'21/03/2027', lab:'Sicilia · gara 1'},
+  {id:'bologna-ti', name:'Bologna', code:'BOL27', data:'04/04/2027', lab:'Tappa Italia'},
+  {id:'palermo', name:'Palermo', code:'PAL27', data:'17/04/2027', lab:'Sicilia · gara 2'},
+  {id:'bosisio', name:'Bosisio (LC)', code:'BOS27', data:'18/04/2027', lab:'Nord · gara 2 Jolly'},
+  {id:'bassano', name:'Bassano (VI)', code:'BAS27', data:'09/05/2027', lab:'Nord · gara 3'},
+  {id:'perugia', name:'Perugia', code:'PER27', data:'09/05/2027', lab:'Centro-Sud · gara 1 Jolly'},
+  {id:'ragusa', name:'Ragusa', code:'RAG27', data:'15/05/2027', lab:'Sicilia · finale Jolly'},
+  {id:'pomezia', name:'Pomezia (RM)', code:'POM27', data:'29/05/2027', lab:'Centro-Sud · gara 2 notturna'},
+  {id:'feltre', name:'Feltre (BL)', code:'FEL27', data:'06/06/2027', lab:'Nord · gara 4'},
+  {id:'roma', name:'Roma', code:'ROM27', data:'20/06/2027', lab:'Centro-Sud · gara 3'},
+  {id:'montello', name:'Montello (TV)', code:'MON27', data:'27/06/2027', lab:'Nord · gara 5'},
+  {id:'tivoli', name:'Tivoli (RM)', code:'TIV27', data:'05/09/2027', lab:'Centro-Sud · gara 4'},
+  {id:'mestre', name:'Mestre (VE)', code:'MES27', data:'11/09/2027', lab:'Nord · gara 6'},
+  {id:'enego', name:'Enego (VI)', code:'ENE27', data:'26/09/2027', lab:'Nord · gara 7'},
+  {id:'roma-finale', name:'Roma', code:'RMF27', data:'26/09/2027', lab:'Centro-Sud · finale'},
+  {id:'illasi', name:'Illasi (VR)', code:'ILL27', data:'09/10/2027', lab:'Nord · finale'},
+  {id:'san-dona', name:'Tortoreto Lido', code:'FIN27', data:'24/10/2027', lab:'Finalissima'}
+];
+// tappa dal calendario: compila nome, codice e data (restano modificabili); "nessuna" = dati scritti a mano
+// versione collegata alle classifiche di circuito (demo): stesse tappe, più le schede di esempio e la pubblicazione
+// gare aggiunte dal comitato durante la stagione (fuori classifica): restano su questo dispositivo
+const dataKey = t => t.data.split('/').reverse().join('');
+const stageList = () => ((window.NWS_CIRCUITO && NWS_CIRCUITO.stages) || CAL_2027).concat(load('extra') || []).sort((a, b) => dataKey(a).localeCompare(dataKey(b)));
+let STAGE_LIST = stageList();
+$('g-stage-box').hidden = false;
+if (window.NWS_CIRCUITO) $('demo-box').hidden = false;
+function renderStages(){
+  const cur = v('g-stage'); STAGE_LIST = stageList();
+  $('g-stage').innerHTML = '<option value="">— nessuna (dati a mano) —</option>' +
+    STAGE_LIST.map(t => `<option value="${t.id}">${esc(t.data.slice(0, 5))} · ${esc(t.name)}${t.lab ? ' · ' + esc(t.lab) : ''}</option>`).join('');
+  $('g-stage').value = cur;
 }
+renderStages();
+$('g-stage').onchange = () => { const t = STAGE_LIST.find(t => t.id === v('g-stage'));
+  if (t){ $('g-tappa').value = t.name; $('g-code').value = t.code; $('g-data').value = t.data; $('g-tipo').value = t.tipo || 'circuito'; $('g-squadre').value = t.squadre ? '1' : ''; }
+  sqBox(); saveForm(); };
+$('b-new-gara').onclick = () => { $('new-gara').hidden = !$('new-gara').hidden; };
+$('b-ng-ok').onclick = () => {
+  const nome = v('ng-nome').trim(), data = v('ng-data').trim(), code = v('ng-code').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const err = !nome ? 'scrivi il nome della gara' : !/^\d{2}\/\d{2}\/\d{4}$/.test(data) ? 'data nel formato gg/mm/aaaa' : !code ? 'scrivi un codice (lettere e numeri)' :
+    STAGE_LIST.some(t => t.code === code) ? `il codice ${code} è già usato` : '';
+  if (err){ $('ng-info').textContent = '⚠ ' + err; return; }
+  const t = {id: 'x-' + code.toLowerCase(), name: nome, code, data, lab: 'fuori classifica' + ($('ng-sq').checked ? ' · a squadre' : ''), tipo: 'fuori', squadre: $('ng-sq').checked};
+  store('extra', (load('extra') || []).concat([t])); renderStages();
+  $('g-stage').value = t.id; $('g-stage').onchange(); $('new-gara').hidden = true;
+  $('ng-info').textContent = `✓ ${nome} (${data}) aggiunta al calendario, fuori classifica.`;
+};
+// squadre: opzioni visibili solo nelle gare a squadre; criteri di pari merito
+const PARI = [['capo', 'somma dei voti del giudice capo'], ['best', 'miglior totale individuale'], ['istr', "totale dell'istruttore"]];
+[0, 1, 2].forEach(i => { $('g-pari' + i).innerHTML = '<option value="">—</option>' + PARI.map(([k, t]) => `<option value="${k}">${i + 1}° ${t}</option>`).join(''); $('g-pari' + i).value = PARI[i][0]; });
+function sqBox(){ $('sq-box').hidden = v('g-squadre') !== '1'; $('b-assign').textContent = v('g-squadre') === '1' ? 'Forma squadre e pettorali' : 'Assegna pettorali'; }
+$('g-squadre').onchange = () => { sqBox(); saveForm(); };
+if (!load('form') && window.NWS_CIRCUITO) setTimeout(() => { $('g-stage').value = NWS_CIRCUITO.defaultStage || STAGE_LIST[0].id; $('g-stage').onchange(); });   // demo, prima apertura
 (function initGara(){
   const s = load('form');
-  renderDec(); $('g-ng').addEventListener('input', renderDec);
-  $('g-prove').value = DEF_PROVE.join('\n'); $('g-sez').value = DEF_SEZ;
+  renderDec(); $('g-ng').addEventListener('change', () => postResize(+v('g-ng')));
+  $('g-sez').value = DEF_SEZ;
   if (s) Object.entries(s).forEach(([k, val]) => { if ($(k)) $(k).value = val; });
+  postLoad(s && s['g-post']);
+  sqBox();
   renderDec();    // giudici disponibili secondo il numero salvato, mantenendo le scelte
   atlPreview();   // riempie i menu delle colonne, poi rimette la scelta salvata
   if (s){ $('g-colp').value = s['g-colp'] || ''; $('g-colc').value = s['g-colc'] || ''; atlPreview(); }
 })();
-function saveForm(){ const f = {}; ['g-tappa','g-code','g-data','g-ng','g-nc','g-var','g-prove','g-sez','g-atl','g-colp','g-colc','g-p1','g-ord','g-man','g-max','g-ris','g-pc','g-stage', ...[...Array(NDEC)].flatMap((_, i) => ['g-dj' + i, 'g-dg' + i])].forEach(k => f[k] = v(k)); store('form', f); }
+function saveForm(){ const f = {}; ['g-tappa','g-code','g-data','g-ng','g-nc','g-var','g-post','g-scarto','g-tipo','g-squadre','g-pettsq','g-asdmix','g-pari0','g-pari1','g-pari2','g-sez','g-atl','g-colp','g-colc','g-p1','g-ord','g-man','g-max','g-ris','g-pc','g-stage', ...[...Array(NDEC)].flatMap((_, i) => ['g-dj' + i, 'g-dg' + i])].forEach(k => f[k] = v(k)); store('form', f); }
 /* anteprima dell'elenco atleti: colonne riconosciute e menu per sceglierle a mano */
 function atlPreview(){
   if (assignAsk){ assignAsk = null; $('b-assign').textContent = 'Assegna pettorali'; $('assign-info').textContent = ''; }
@@ -743,9 +1048,9 @@ function atlPreview(){
 }
 $('g-atl').oninput = $('g-colp').onchange = $('g-colc').onchange = atlPreview;
 $('b-assign').onclick = () => {
-  const reset = () => { assignAsk = null; $('b-assign').textContent = 'Assegna pettorali'; };
+  const reset = () => { assignAsk = null; sqBox(); };
   try {
-    const r = assignBibs(!!assignAsk);
+    const r = v('g-squadre') === '1' ? assignTeams(!!assignAsk) : assignBibs(!!assignAsk);
     if (r && r.ask){   // mancano dati: si mostra la nota e si chiede conferma
       $('assign-info').innerHTML = r.ask.map(t => '⚠ ' + esc(t)).join('<br>') + '<br><b>Premi "Conferma e assegna" per procedere così, oppure correggi il file e ricaricalo.</b>';
       $('b-assign').textContent = 'Conferma e assegna'; assignAsk = r.ask; return;
@@ -756,9 +1061,15 @@ $('b-assign').onclick = () => {
 // elenco per la segreteria con le colonne del comitato: un foglio per gli individuali e uno per le coppie
 function exportRows(){
   const T = atlTable(v('g-atl')); if (!T) throw new Error('nessun elenco atleti');
+  if (v('g-squadre') === '1'){   // staffetta: un foglio con squadre, pettorali e frazioni
+    const H = T.head, f = re => H.findIndex(h => re.test(h)), g = (r, i) => i >= 0 ? (r[i] || '') : '';
+    const cols = [f(/^squadra/i), f(/^pettorale squadra/i), f(/^frazione/i), f(/^pettorale$/i), f(/^cognome/i), f(/^nome/i), f(/^cat/i), asdCol(H)];
+    const head = ['SQUADRA', 'PETTORALE SQUADRA', 'FRAZIONE', 'PETTORALE', 'COGNOME', 'NOME', 'CATEGORIA', 'ASD'].filter((_, i) => cols[i] >= 0);
+    return {ind: [head].concat(T.rows.map(r => cols.filter(i => i >= 0).map(i => /^\d+$/.test(g(r, i)) ? +g(r, i) : g(r, i)))), cop: null, nome: 'Squadre'};
+  }
   const H = T.head, f = re => H.findIndex(h => re.test(h)), g = (r, i) => i >= 0 ? (r[i] || '') : '';
   const ip = v('g-colp') !== '' ? +v('g-colp') : f(PETT_RE), ic = f(/^cognome/i), inn = f(/^nome/i), icat = f(/^cat/i),
-        ia = f(/asd|societ|squadra|club/i), ig = f(/^(genere|sesso)$/i), it = f(/^(gara|tipo)/i);
+        ia = asdCol(H), ig = f(/^(genere|sesso)$/i), it = f(/^(gara|tipo)/i);
   const num = c => /^\d+$/.test(c) ? +c : c, isCop = r => it >= 0 && /copp/i.test(r[it] || '');
   const base = c => /^istr/i.test(c) ? 'Istruttore' : /^camm/i.test(c) ? 'Camminatore' : c;
   // genere: quello del file così com'è scritto (Maschile/Femminile o M/F); se manca, dalla categoria
@@ -776,7 +1087,7 @@ function exportRows(){
 $('b-export').onclick = async () => {
   try {
     const E = exportRows(), X = await loadXLSX(), wb = X.utils.book_new();
-    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(E.ind), 'Individuali');
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(E.ind), E.nome || 'Individuali');
     if (E.cop) X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(E.cop), 'Coppie');
     X.writeFile(wb, `pettorali_${v('g-code') || 'gara'}.xlsx`);
   } catch(e){ $('assign-info').textContent = '⚠ ' + e.message; }
@@ -845,7 +1156,7 @@ function analizza(){
   const txt = v('g-atl'), T = atlTable(txt);
   if (!T || !T.rows.length) return null;
   const H = T.head, find = re => H.findIndex(h => re.test(h));
-  const ic = find(/^cognome/i), inn = find(/^nome/i), ia = find(/asd|societ|squadra|club/i), icat = find(/^cat/i), it = find(/^(gara|tipo)/i);
+  const ic = find(/^cognome/i), inn = find(/^nome/i), ia = asdCol(H), icat = find(/^cat/i), it = find(/^(gara|tipo)/i);
   const ip = v('g-colp') !== '' ? +v('g-colp') : find(PETT_RE);
   const isCop = r => it >= 0 && /copp/i.test(r[it] || '');
   const W = T.rows.map(r => r.slice()), M = memo(), RF = riferimenti(), auto = [], items = [];
@@ -1089,6 +1400,14 @@ $('cop-file').onchange = async e => {
 };
 $('b-gen').onclick = () => {
   let gara;
+  const ck = postCheck(POST.rows);
+  if (ck.err.length){ $('gen-info').innerHTML = ck.err.map(t => '⚠ ' + esc(t)).join('<br>'); return; }
+  const wkey = ck.warn.join('|');
+  if (ck.warn.length && genAsk !== wkey){
+    genAsk = wkey; $('b-gen').textContent = 'Conferma e genera schede';
+    $('gen-info').innerHTML = ck.warn.map(t => '⚠ ' + esc(t)).join('<br>') + '<br><b>Premi "Conferma e genera schede" per procedere così, oppure correggi le postazioni.</b>'; return;
+  }
+  genAsk = null; $('b-gen').textContent = 'Genera schede';
   try { gara = readGara(); } catch(e){ $('gen-info').textContent = '⚠ ' + e.message; return; }
   if (!gara.code) { $('gen-info').textContent = '⚠ Inserisci un codice gara'; return; }
   saveForm();
@@ -1681,7 +2000,7 @@ function showRead(res){
       const val = x.np ? 'NP' : x.ae ? 'AE' : x.score === null ? '—' : x.score;
       const det = x.zone && x.score !== null && !x.ae ? ` <small>(${x.zone.S}·${x.zone.C}·${x.zone.I}${x.sync !== null ? ' + ' + x.sync : ''})</small>` : capo && x.voto !== undefined && x.sync !== null ? ` <small>(${x.voto}+${x.sync})</small>` : (!capo && x.sync !== null && x.score !== null && !x.ae) ? ` <small>(${x.tec}+${x.sync})</small>` : '';
       return `<b>${val}</b>${det}<div class="digits">${digitImgs(res, i, g)}</div>`; };
-    const row = res.sh.rows[i] || {}, asd = [].concat(row.campi || []).map(c => Object.entries(c).find(([h]) => /asd|societ|squadra|club/i.test(h))).filter(Boolean).map(e => e[1]);
+    const row = res.sh.rows[i] || {}, asd = [].concat(row.campi || []).map(c => Object.entries(c).find(([h]) => ASD_RE.test(h))).filter(Boolean).map(e => e[1]);
     const chi = [row.nome, res.sh.type === 'IND' ? row.cat : catLabel(row.cat || ''), [...new Set(asd)].join(' / ')].filter(Boolean).map(esc).join(' · ');
     return `<tr><td class="n">${r.p}<br><small>${chi}</small></td><td>${cell(0)}</td><td>${cell(1)}</td><td>${r.flags.map(f => `<span class="pill warn">${esc(f)}</span>`).join(' ')}</td></tr>`;
   }).join('') + '</table>';
@@ -1724,6 +2043,16 @@ function circuitCat(type, cat){
   return /^istruttric/.test(c) ? 'istruttore-f' : /^istrutt/.test(c) ? 'istruttore-m' : /^camminatric/.test(c) ? 'camminatore-f' : /^cammin/.test(c) ? 'camminatore-m' : '';
 }
 const campo = (a, re) => { for (const c of [].concat(a.campi || [])){ const e = Object.entries(c).find(([h]) => re.test(h)); if (e && e[1]) return e[1]; } return ''; };
+// ordine delle squadre: totale, poi i criteri di pari merito scelti; pari vero = stessa posizione e avviso
+function teamSort(rows, pari){
+  const key = r => [r.tot].concat(pari.map(k => r[k] || 0));
+  const cmp = (x, y) => { const a = key(x), b = key(y); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return b[i] - a[i]; return 0; };
+  rows.sort(cmp);
+  rows.forEach((r, i) => { r.pos = i && !cmp(r, rows[i-1]) ? rows[i-1].pos : i + 1;
+    r.spareggio = !!(i && r.tot === rows[i-1].tot) || !!(rows[i+1] && r.tot === rows[i+1].tot);
+    r.pari = !!((i && !cmp(r, rows[i-1])) || (rows[i+1] && !cmp(r, rows[i+1]))); });
+  return rows;
+}
 function computeClassifica(code){
   const gara = (load('gare') || {})[code]; if (!gara) return null;
   const L = Object.values(load('letture') || {}).filter(l => l.code === code), atl = {}, mancanti = [];
@@ -1741,6 +2070,13 @@ function computeClassifica(code){
     x.J[l.judge] = [(x.J[l.judge] || [0, 0])[0] + gs[0], (x.J[l.judge] || [0, 0])[1] + gs[1]];   // voti di ogni giudice, per giro
     x.campo += gs[0] + gs[1];   // Tot. giudici: tutti i giudici, capo compreso
   }));
+  // scarto (se scelto per la gara): per ogni giro si tolgono il voto più alto e il più basso dei giudici di campo
+  if (gara.scarto) Object.values(atl).forEach(x => {
+    [0, 1].forEach(g => {
+      const vs = Object.keys(x.J).filter(j => j[0] === 'G').map(j => x.J[j][g]);
+      if (vs.length >= 3) x.campo -= Math.max(...vs) + Math.min(...vs);
+    });
+  });
   // un assente deve esserlo per tutti: se i giudici non sono d'accordo decide la maggioranza, ma si segnala
   const incoerenti = [];
   Object.values(atl).forEach(x => {
@@ -1752,7 +2088,7 @@ function computeClassifica(code){
   Object.values(atl).forEach(x => {
     if (x.ass || !x.n) return;
     const cid = circuitCat(x.sec.type, x.a.cat), cop = x.sec.type !== 'IND', nomi = (x.a.nome || '').split(' / ');
-    const r = {p: x.a.p, cop, assoc: [...new Set([].concat(x.a.campi || []).map(c => campo({campi: c}, /asd|societ|squadra|club/i)).filter(Boolean))].join(' / '),
+    const r = {p: x.a.p, cop, assoc: [...new Set([].concat(x.a.campi || []).map(c => campo({campi: c}, ASD_RE)).filter(Boolean))].join(' / '),
       tot: x.campo, verif: x.verif + (x.assBy.length ? 1 : 0)};
     // decimali: a coppie di cifre, nell'ordine scelto per la gara (capo per primo)
     r.dec = (gara.decimali || [{j: 'C1', g: 'tot'}]).map(d => { const s = x.J[d.j] || [0, 0]; return Math.min(99, d.g === '1' ? s[0] : d.g === '2' ? s[1] : s[0] + s[1]); });
@@ -1761,6 +2097,26 @@ function computeClassifica(code){
     else { r.cognome = campo(x.a, /^cognome/i) || nomi[0].split(' ')[0] || ''; r.nome = campo(x.a, /^nome$/i) || nomi[0].split(' ').slice(1).join(' '); }
     (cats[cid] = cats[cid] || []).push(r);
   });
+  // staffetta: solo classifica a squadre (somma dei Tot. giudici dei componenti)
+  if (gara.squadre){
+    const T = {};
+    Object.values(atl).forEach(x => {
+      const sq = campo(x.a, /^squadra/i) || '(senza squadra)', t = T[sq] = T[sq] || {nome: sq, membri: [], asd: new Set()};
+      const capo = Object.keys(x.J).filter(j => j[0] === 'C').reduce((s, j) => s + x.J[j][0] + x.J[j][1], 0);
+      const a = campo(x.a, ASD_RE); if (a) t.asd.add(a);
+      t.membri.push({p: x.a.p, lab: x.a.lab || String(x.a.p), nome: x.a.nome || '', cat: x.a.cat || '', istr: oneCat(x.a.cat) === 'I',
+        tot: x.ass || !x.n ? 0 : x.campo, capo: x.ass ? 0 : capo, assente: x.ass || !x.n, verif: x.verif});
+    });
+    const squadre = Object.values(T).map(t => {
+      t.membri.sort((a, b) => a.p - b.p);
+      return {nome: t.nome, assoc: [...t.asd].join(' / '), membri: t.membri, lab: t.membri[0] ? t.membri[0].lab.split('·')[0] : '',
+        tot: t.membri.reduce((s, m) => s + m.tot, 0), capo: t.membri.reduce((s, m) => s + m.capo, 0),
+        best: Math.max(0, ...t.membri.map(m => m.tot)), istr: t.membri.filter(m => m.istr).reduce((s, m) => s + m.tot, 0),
+        incompleta: t.membri.length < 4 || t.membri.some(m => m.assente), verif: t.membri.reduce((s, m) => s + m.verif, 0)};
+    });
+    teamSort(squadre, gara.pari && gara.pari.length ? gara.pari : ['capo', 'best', 'istr']);
+    return {gara, cats: {}, squadre, mancanti, incoerenti, senza, assenti: Object.values(atl).filter(x => x.ass).length, letture: L.length, verif: Object.values(atl).reduce((t, x) => t + x.verif, 0)};
+  }
   // ordine: Tot. giudici, poi i decimali uno dopo l'altro; pari solo se coincidono tutti
   const key = r => [r.tot].concat(r.dec), cmp = (x, y) => { const a = key(x), b = key(y); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return b[i] - a[i]; return 0; };
   Object.values(cats).forEach(a => { a.sort(cmp); a.forEach((r, i) => r.pos = i && !cmp(r, a[i-1]) ? a[i-1].pos : i + 1); });
@@ -1771,16 +2127,31 @@ function renderClassifica(){
   sel.innerHTML = Object.keys(garas).map(k => `<option value="${esc(k)}">${esc(garas[k].tappa || k)} · ${esc(k)}</option>`).join('');
   if (garas[cur]) sel.value = cur;
   const C = sel.value && computeClassifica(sel.value);
-  $('b-cl-pub').hidden = !(window.NWS_CIRCUITO && C && C.gara.stage);
+  const fuori = C && (C.gara.tipo === 'fuori' || C.gara.squadre);
+  $('b-cl-pub').hidden = !(window.NWS_CIRCUITO && C && (fuori ? NWS_CIRCUITO.publishAltre : C.gara.stage));
+  $('b-cl-pub').textContent = fuori ? 'Pubblica in "Altre gare"' : 'Pubblica nelle classifiche del circuito';
   if (!C){ $('cl-info').innerHTML = '<p class="hint">Nessuna gara: genera le schede nella scheda 1.</p>'; $('cl-tab').innerHTML = ''; return; }
   // il criterio dei decimali resta nei dati della gara: in classifica compaiono solo i punti
-  $('cl-formula').innerHTML = '<b>Tot. giudici</b> = somma dei voti di tutti i giudici, capo compreso, nei due giri · i decimali risolvono le parità.';
+  const PN = Object.fromEntries(PARI);
+  $('cl-formula').innerHTML = C.squadre
+    ? '<b>Totale squadra</b> = somma dei Tot. giudici dei componenti' + (C.gara.scarto ? ' (con lo scarto del voto più alto e più basso)' : '') +
+      ' · pari merito: ' + (C.gara.pari && C.gara.pari.length ? C.gara.pari : ['capo', 'best', 'istr']).map(k => PN[k]).join(', poi ') + ' · gara fuori classifica: nessun punto per il circuito.'
+    : C.gara.scarto
+    ? '<b>Tot. giudici</b> = somma dei voti nei due giri; per ogni giro si scartano il voto più alto e il più basso dei giudici di campo, poi si aggiunge il capo · i decimali risolvono le parità.'
+    : '<b>Tot. giudici</b> = somma dei voti di tutti i giudici, capo compreso, nei due giri · i decimali risolvono le parità.';
   const nm = C.mancanti.length;
   $('cl-info').innerHTML = `<p>${C.letture} schede lette · ` + (nm ? `<span class="pill warn">${nm} schede mancanti</span> <small>${esc(C.mancanti.slice(0, 8).join(', '))}${nm > 8 ? '…' : ''}</small>` : '<span class="pill ok">tutte le schede lette</span>') +
     (C.verif ? ` · <span class="pill warn">${C.verif} righe da verificare</span>` : '') + ` · ${C.assenti} assenti</p>` +
     (C.incoerenti.length ? `<p><span class="pill bad">Assenze non coerenti tra i giudici: ${C.incoerenti.length}</span></p><ul class="hint" style="margin:4px 0">${C.incoerenti.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '') +
     (C.senza && !nm ? `<p><span class="pill warn">${C.senza} iscritti senza voti</span></p>` : '') +
     (nm ? '<p class="hint">Classifica parziale: si completa man mano che arrivano le schede.</p>' : '');
+  if (C.squadre){
+    $('cl-tab').innerHTML = `<div class="card"><h2>Classifica a squadre <small style="color:var(--mute);font-weight:400">· ${C.squadre.length}</small></h2><table class="res"><tr><th>Pos.</th><th>Squadra</th><th>ASD</th><th>Componenti (Tot. giudici)</th><th style="text-align:right">Totale</th></tr>` +
+      C.squadre.map(r => `<tr><td class="n">${r.pos}</td><td><b>${esc(r.nome)}</b>${r.lab && C.gara.pettsq !== 'atleta' ? `<br><small>pett. ${esc(r.lab)}</small>` : ''}` +
+        (r.incompleta ? ' <span class="pill warn">incompleta</span>' : '') + (r.pari ? ' <span class="pill bad">pari merito</span>' : r.spareggio ? ' <span class="pill">spareggio</span>' : '') + (r.verif ? ' <span class="pill warn">da verificare</span>' : '') +
+        `</td><td>${esc(r.assoc)}</td><td><small>${r.membri.map(m => `${esc(m.lab)} ${esc(m.nome)} <b>${m.assente ? 'ASS' : m.tot}</b>`).join('<br>')}</small></td><td style="text-align:right"><b>${r.tot}</b></td></tr>`).join('') + '</table></div>';
+    return;
+  }
   const order = Object.keys(CAT_NOMI);
   $('cl-tab').innerHTML = Object.keys(C.cats).sort((a, b) => order.indexOf(a) - order.indexOf(b)).map(cid => {
     const rows = C.cats[cid], cop = rows[0].cop;
@@ -1793,6 +2164,8 @@ $('b-cl-xls').onclick = async () => {
   const C = computeClassifica(v('cl-gara')); if (!C) return;
   try {
     const X = await loadXLSX(), wb = X.utils.book_new();
+    if (C.squadre) X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['POS', 'Squadra', 'ASD', 'Pett.', 'Componente', 'Categoria', 'Tot. giudici', 'Totale squadra']]
+      .concat(C.squadre.flatMap(r => r.membri.map((m, i) => [i ? '' : r.pos, i ? '' : r.nome, i ? '' : r.assoc, m.lab, m.nome, m.cat, m.assente ? 'ASS' : m.tot, i ? '' : r.tot])))), 'Squadre');
     Object.entries(C.cats).forEach(([cid, rows]) => {
       const cop = rows[0].cop, aoa = [['POS', 'Pett.', ...(cop ? ['Partecipante 1', 'Partecipante 2'] : ['Cognome', 'Nome']), 'ASD', 'Tot. giudici', 'Punti']]
         .concat(rows.map(r => [r.pos, r.p, ...(cop ? [r.p1, r.p2] : [r.cognome, r.nome]), r.assoc, r.tot, r.ptsTxt]));
@@ -1804,6 +2177,12 @@ $('b-cl-xls').onclick = async () => {
 // collegamento con l'app delle classifiche di circuito: stesso formato della tabella "risultati" (una riga per tappa e categoria)
 $('b-cl-pub').onclick = () => {
   const C = computeClassifica(v('cl-gara')); if (!C || !window.NWS_CIRCUITO) return;
+  if (C.gara.tipo === 'fuori' || C.gara.squadre){   // fuori classifica: sezione "Altre gare", niente punti di circuito
+    NWS_CIRCUITO.publishAltre({code: C.gara.code, tappa: C.gara.tappa, data: C.gara.data, squadre: C.squadre ? C.squadre.map(r => ({pos: r.pos, nome: r.nome, assoc: r.assoc, tot: r.tot, incompleta: r.incompleta,
+      membri: r.membri.map(m => ({lab: m.lab, nome: m.nome, tot: m.assente ? null : m.tot}))})) : null,
+      cats: Object.entries(C.cats).map(([cid, rows]) => [CAT_NOMI[cid], rows.map(r => ({pos: r.pos, nome: r.cop ? r.p1 + ' / ' + r.p2 : r.cognome + ' ' + r.nome, assoc: r.assoc, tot: r.tot}))])});
+    $('cl-info').insertAdjacentHTML('beforeend', `<p>✓ Pubblicata in "Altre gare". <a href="${NWS_CIRCUITO.linkAltre || NWS_CIRCUITO.link}">Apri</a></p>`); return;
+  }
   const n = NWS_CIRCUITO.publish(C.gara.stage, Object.entries(C.cats).filter(([cid]) => cid).map(([cid, rows]) => [cid,
     rows.map(r => r.cop ? {pos: r.pos, p1: r.p1, p2: r.p2, assoc: r.assoc, tot: r.tot, pts: r.ptsTxt.replace(',', '.')} : {pos: r.pos, cognome: r.cognome, nome: r.nome, assoc: r.assoc, tot: r.tot, pts: r.ptsTxt.replace(',', '.')})]));
   $('cl-info').insertAdjacentHTML('beforeend', `<p>✓ Pubblicate ${n} categorie. <a href="${NWS_CIRCUITO.link}">Apri le classifiche del circuito</a></p>`);
@@ -1875,7 +2254,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 if (false)   /* demo: niente cache offline */ navigator.serviceWorker.register('sw.js').catch(() => {});
 
-window.NWS = {layout, sheetSVG, buildSheets, parseSezioni, readSheet, parsePayload, makePayload, G, S, evaluate, ZB};
+window.NWS = {layout, sheetSVG, buildSheets, teamSort, assignTeams, postAuto, postCheck, postLabel, POST_MODELLI, computeClassifica, parseSezioni, readSheet, parsePayload, makePayload, G, S, evaluate, ZB};
 </script>
 </body>
 </html>
