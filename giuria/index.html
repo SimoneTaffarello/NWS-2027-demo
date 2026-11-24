@@ -211,8 +211,8 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
         <p class="hint">Individuale: <code>IND | Gruppo 1 | 1-25</code>. Coppie, con la categoria: <code>COP | Coppie | 151-160 CC, 161-170 CI, 171-176 II</code> (C = camminatrici e camminatori, I = istruttori e istruttrici; MIX = CI). Ogni 25 pettorali si crea un nuovo foglio.</p></div>
       <div style="grid-column:1/-1"><label for="g-atl">Atleti (facoltativo)</label>
         <div class="row" style="margin-bottom:6px">
-          <label class="btn sec" style="margin:0">Carica atleti (Excel o CSV)<input id="atl-file" type="file" accept=".xlsx,.xls,.ods,.csv,.txt" hidden></label>
-          <label class="btn sec" style="margin:0">Carica coppie (foglio del comitato)<input id="cop-file" type="file" accept=".xlsx,.xls,.ods,.csv,.txt" hidden></label>
+          <label class="btn sec" style="margin:0">Carica individuali (Excel o CSV)<input id="atl-file" type="file" accept=".xlsx,.xls,.ods,.csv,.txt" hidden></label>
+          <label class="btn sec" style="margin:0">Carica coppie (Excel o CSV)<input id="cop-file" type="file" accept=".xlsx,.xls,.ods,.csv,.txt" hidden></label>
           <select id="atl-sheet" style="width:auto" hidden></select>
           <span class="hint" id="atl-load" style="margin:0"></span>
         </div>
@@ -307,7 +307,7 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 'use strict';
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 document.getElementById('ver').textContent = VERSION;
 { const hv = document.createElement('span'); hv.className = 'hsub'; hv.style.marginLeft = 'auto'; hv.textContent = 'v' + VERSION; const hd = document.querySelector('header'); if (hd) hd.appendChild(hv); }
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
@@ -621,7 +621,7 @@ const oneCat = c => /^(c|camm)/i.test((c||'').trim()) ? 'C' : /^(i|istr)/i.test(
 function atlTable(txtv){
   const lines = (txtv||'').split(/\r?\n/).filter(l => l.trim());
   if (!lines.length) return null;
-  // tabulazione (Carica atleti, incolla da un foglio di calcolo) anche se la prima riga ha una sola colonna
+  // tabulazione (Carica individuali/coppie, incolla da un foglio di calcolo) anche se la prima riga ha una sola colonna
   const sep = txtv.includes('\t') || !/[;,]/.test(lines[0]) ? '\t' : lines[0].includes(';') ? ';' : ',';
   const split = l => l.split(sep).map(s => s.trim());
   let head = split(lines[0]), body = lines.slice(1);
@@ -1329,7 +1329,7 @@ function applyCheck(){
 }
 $('b-chk').onclick = () => runCheck();
 
-/* Carica atleti: Excel con SheetJS (scaricato solo quando serve), CSV letto direttamente */
+/* Carica individuali / coppie: Excel con SheetJS (scaricato solo quando serve), CSV letto direttamente */
 const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
 let xlsxReady = null, ATL_BOOK = null;
 function loadXLSX(){
@@ -1389,14 +1389,14 @@ function withGenere(rows){
   });
   return rows;
 }
-/* unione con l'elenco già presente: "Carica coppie" sostituisce solo le coppie,
-   "Carica atleti" sostituisce tutto, ma tiene le coppie se il nuovo file non ne contiene */
+/* unione con l'elenco già presente: "Carica coppie" sostituisce solo le coppie, "Carica individuali" solo gli individuali.
+   Le colonne si abbinano per ruolo: "ASD DI APPARTENENZA" e "ASD" sono la stessa colonna, così come le varianti del pettorale */
 function mergeAtleti(NR, soloCoppie){
-  const cur = atlTable(v('g-atl')), key = h => String(h).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cur = atlTable(v('g-atl')), key = h => ASD_RE.test(h) ? 'asd' : PETT_RE.test(h) ? 'pettorale' : String(h).toLowerCase().replace(/[^a-z0-9]/g, '');
   const copOf = H => { const it = H.findIndex(h => /^(gara|tipo)/i.test(h)); return r => it >= 0 && /copp/i.test(r[it] || ''); };
-  const NH = NR[0], nCop = copOf(NH), nuovoHaCoppie = NR.slice(1).some(nCop);
+  const NH = NR[0], nCop = copOf(NH);
   if (!cur || !cur.rows.length) return NR;
-  const cCop = copOf(cur.head), keep = cur.rows.filter(r => soloCoppie ? !cCop(r) : !nuovoHaCoppie && cCop(r));
+  const cCop = copOf(cur.head), keep = cur.rows.filter(r => soloCoppie ? !cCop(r) : cCop(r));
   if (!keep.length) return NR;
   const H = cur.head.slice(); NH.forEach(h => { if (!H.some(x => key(x) === key(h))) H.push(h); });
   if (!H.some(h => /^(gara|tipo)/i.test(h))) H.push('Gara');
@@ -1405,11 +1405,22 @@ function mergeAtleti(NR, soloCoppie){
   const gi = H.findIndex(h => /^(gara|tipo)/i.test(h)), isC = r => /copp/i.test(r[gi] || '');
   return [H].concat(righe.filter(r => !isC(r)), righe.filter(isC));   // prima gli individuali
 }
+let copTolte = 0;   // coppie scartate da "Carica individuali" (file misto)
 function loadRows(rows, soloCoppie){
   let R = rowsToTSV(rows).split('\n').map(l => l.split('\t'));
+  copTolte = 0;
   if (!R.length || !R[0].some(Boolean)) throw new Error('il file è vuoto');
-  if (isComCop(R[0])) R = coppieToRows(R), soloCoppie = true;
-  else if (soloCoppie){   // file misto (individuali e coppie): da "Carica coppie" si prendono solo le coppie
+  if (isComCop(R[0])){
+    if (!soloCoppie) throw new Error('questo è il foglio delle coppie: usa "Carica coppie"');
+    R = coppieToRows(R);
+  }
+  else if (!soloCoppie){   // file misto: da "Carica individuali" si prendono solo gli individuali
+    const it = R[0].findIndex(h => /^(gara|tipo)/i.test(h)), ind = R.slice(1).filter(r => !(it >= 0 && /copp/i.test(r[it] || '')));
+    copTolte = R.length - 1 - ind.length;
+    if (!ind.length) throw new Error('nel file ci sono solo coppie: usa "Carica coppie"');
+    R = [R[0]].concat(ind);
+  }
+  else {   // file misto (individuali e coppie): da "Carica coppie" si prendono solo le coppie
     const it = R[0].findIndex(h => /^(gara|tipo)/i.test(h));
     if (it < 0) throw new Error('non sembra il foglio coppie: servono le colonne COGNOME 1° CONC., NOME 1° CONC, COGNOME 2° CONC, NOME 2° CONC, CATEGORIA, ASD 1° CONC, ASD 2° CONC');
     R = [R[0]].concat(R.slice(1).filter(r => /copp/i.test(r[it] || '')));
@@ -1438,7 +1449,8 @@ $('atl-file').onchange = async e => {
     if (F.book){ ATL_BOOK = F.book; const names = ATL_BOOK.SheetNames, sel = $('atl-sheet');
       sel.innerHTML = names.map(n => `<option>${esc(n)}</option>`).join(''); sel.hidden = names.length < 2; }
     loadRows(F.rows, false);
-    $('atl-load').textContent = `✓ ${f.name}` + (privTolte ? ` · ${privTolte} colonne di contatti (telefono, email) scartate` : '') + ($('atl-sheet').hidden ? '' : ' · scegli il foglio:');
+    $('atl-load').textContent = `✓ individuali da ${f.name}` + (privTolte ? ` · ${privTolte} colonne di contatti (telefono, email) scartate` : '') +
+      (copTolte ? ` · nel file ci sono anche ${copTolte} righe di coppie: caricale con "Carica coppie"` : '') + ($('atl-sheet').hidden ? '' : ' · scegli il foglio:');
   } catch(err){ $('atl-load').textContent = `⚠ ${f.name}: ${err.message}`; }
 };
 $('atl-sheet').onchange = () => showSheet(v('atl-sheet'));
