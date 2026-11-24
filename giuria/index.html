@@ -234,12 +234,15 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
           <label for="g-max" style="margin:0">Massimo per manche</label><input id="g-max" type="number" min="5" max="60" value="30" style="width:70px">
           <label for="g-ris" style="margin:0">Riserve</label><input id="g-ris" type="number" min="0" max="30" value="5" style="width:60px">
           <label for="g-pc" style="margin:0">Primo pettorale coppie</label><input id="g-pc" type="number" min="1" value="150" style="width:80px">
+          <label for="g-rc" style="margin:0">Riserve coppie I/C</label><input id="g-rc" type="number" min="0" max="30" value="3" style="width:60px">
+          <label for="g-pm" style="margin:0">Primo pettorale miste</label><input id="g-pm" type="number" min="1" placeholder="auto" style="width:80px">
+          <label for="g-rm" style="margin:0">Riserve coppie miste</label><input id="g-rm" type="number" min="0" max="30" value="0" style="width:60px">
         </div>
         <div class="row" style="margin-top:8px">
           <button class="btn sec" id="b-assign">Assegna pettorali</button>
           <button class="btn sec" id="b-export">Scarica elenco con pettorali</button>
         </div>
-        <p class="hint" id="assign-info">Prima il Gruppo 1, poi gli indifferenti fino a riempire le prime due manche, poi il Gruppo 2, poi gli indifferenti rimasti. I pettorali già scritti nel file restano; le riserve vanno in coda all'ultima manche. Coppie dal primo pettorale coppie: prima istruttori e camminatori, poi le miste. Le sezioni si scrivono da sole.</p></div>
+        <p class="hint" id="assign-info">Prima il Gruppo 1, poi gli indifferenti fino a riempire le prime due manche, poi il Gruppo 2, poi gli indifferenti rimasti. I pettorali già scritti nel file restano; le riserve vanno in coda all'ultima manche. Coppie dal primo pettorale coppie (se è occupato, dalla prima decina libera): prima i camminatori, poi gli istruttori, poi le loro riserve; le miste partono dalla decina successiva (o dal primo pettorale miste, se indicato), con le loro riserve in coda. Le sezioni si scrivono da sole.</p></div>
     </div>
     <div class="row" style="margin-top:12px">
       <button class="btn" id="b-gen">Genera schede</button>
@@ -307,7 +310,7 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 'use strict';
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 document.getElementById('ver').textContent = VERSION;
 { const hv = document.createElement('span'); hv.className = 'hsub'; hv.style.marginLeft = 'auto'; hv.textContent = 'v' + VERSION; const hd = document.querySelector('header'); if (hd) hd.appendChild(hv); }
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
@@ -721,18 +724,34 @@ function assignBibs(confirmed){
     sez.push(`IND | Manche ${i+1} | ${ranges(ch).join(', ')}`); });
   const clash = ckept.map(u => u.b).filter(p => used.has(p) || ris.includes(p));
   if (clash.length) throw new Error(`i pettorali ${clash.join(', ')} sono sia di un individuale (o riserva) sia di una coppia: cambia il primo pettorale o i numeri delle coppie`);
-  // coppie da assegnare: fase 1 istruttori e camminatori, fase 2 miste; poi per cognome
-  const pc1 = Math.max(1, +v('g-pc') || 150), usedC = new Set([...used, ...ris, ...ckept.map(u => u.b)]);
-  const fr = (r, i) => String(r[i] || '');
-  ctodo.sort((x, y) => x.fase - y.fase || (x.cat === y.cat ? 0 : x.cat === 'II' ? -1 : 1) ||
+  // coppie da assegnare: camminatori, istruttori, loro riserve; le miste dalla decina successiva, poi le loro riserve; dentro ogni tipo per cognome
+  const pc0 = Math.max(1, +v('g-pc') || 150), usedC = new Set([...used, ...ris, ...ckept.map(u => u.b)]);
+  const decina = n => Math.ceil(n / 10) * 10, freeFrom = n => { while (usedC.has(n)) n++; return n; };
+  // primo pettorale coppie occupato (es. 150 individuali): si parte dalla prima decina libera dopo individuali e riserve
+  const pcOcc = ctodo.length > 0 && [...used, ...ris].includes(pc0), pc1 = pcOcc ? decina(Math.max(...used, ...ris) + 1) : pc0;
+  const fr = (r, i) => String(r[i] || ''), CORD = {CC: 0, II: 1, CI: 2};
+  ctodo.sort((x, y) => CORD[x.cat] - CORD[y.cat] ||
     fr(x.rows[0], ic).localeCompare(fr(y.rows[0], ic), 'it', {sensitivity:'base'}) || fr(x.rows[0], inn).localeCompare(fr(y.rows[0], inn), 'it'));
-  let q = pc1; ctodo.forEach(u => { while (usedC.has(q)) q++; u.b = q; usedC.add(q); u.rows.forEach(r => r[ip] = String(q)); });
-  const f1 = units.filter(u => u.fase === 1).map(u => u.b), f2 = units.filter(u => u.fase === 2).map(u => u.b);
-  if (f1.length) sez.push(`COP | Coppie Istruttori e Camminatori | ${ranges(f1).join(', ')}`);
-  if (f2.length) sez.push(`COP | Coppie Miste | ${ranges(f2).join(', ')}`);
-  const cb = units.map(u => u.b).sort((a, b) => a - b), copMsg = !units.length ? '' :
-    ` · coppie: ${f1.length} istruttori/camminatori + ${f2.length} mist${f2.length === 1 ? 'a' : 'e'}, pettorali ${cb[0]}–${cb[cb.length-1]}` +
-    (ckept.length && ctodo.length ? ` (${ckept.length} dal file)` : '') + (ctodo.length && usedC.size && [...used, ...ris].includes(pc1) ? ` ⚠ il ${pc1} era già usato: le coppie partono dal primo numero libero` : '');
+  const put = (list, from) => { let q = from; list.forEach(u => { q = freeFrom(q); u.b = q; usedC.add(q); u.rows.forEach(r => r[ip] = String(q)); }); };
+  const take = (n, from) => { const out = []; let q = from; for (let i = 0; i < n; i++){ q = freeFrom(q); out.push(q); usedC.add(q); } return out; };
+  const nrc = Math.max(0, Math.min(30, +v('g-rc') || 0)), nrm = Math.max(0, Math.min(30, +v('g-rm') || 0));
+  put(ctodo.filter(u => u.fase === 1), pc1);
+  const u1 = units.filter(u => u.fase === 1), u2 = units.filter(u => u.fase === 2);
+  const rc = u1.length ? take(nrc, Math.max(...u1.map(u => u.b)) + 1) : [];
+  // miste: dal numero scelto a mano, altrimenti dalla decina dopo istruttori, camminatori e loro riserve
+  const pm = +v('g-pm') > 0 ? +v('g-pm') : 0, mix1 = pm || (u1.length ? decina(Math.max(...u1.map(u => u.b), ...rc) + 1) : pc1);
+  const t2 = ctodo.filter(u => u.fase === 2); put(t2, mix1);
+  const pmOcc = pm && t2.length && Math.min(...t2.map(u => u.b)) !== pm ? Math.min(...t2.map(u => u.b)) : 0;
+  const rm = u2.length ? take(nrm, Math.max(...u2.map(u => u.b)) + 1) : [];
+  const f1 = u1.map(u => u.b), f2 = u2.map(u => u.b), nC = u1.filter(u => u.cat === 'CC').length;
+  if (f1.length) sez.push(`COP | Coppie Istruttori e Camminatori | ${ranges(f1.concat(rc)).join(', ')}`);
+  if (f2.length) sez.push(`COP | Coppie Miste | ${ranges(f2.concat(rm)).join(', ')}`);
+  const span = ps => { const s = ps.slice().sort((a, b) => a - b); return s.length > 1 ? `${s[0]}–${s[s.length-1]}` : `${s[0]}`; };
+  const copMsg = !units.length ? '' :
+    ` · coppie camminatori ${nC}, istruttori ${u1.length - nC}` + (f1.length ? ` (${span(f1)})` : '') + (rc.length ? `, riserve ${span(rc)}` : '') +
+    ` · coppie miste ${f2.length}` + (f2.length ? ` (${span(f2)})` : '') + (rm.length ? `, riserve ${span(rm)}` : '') +
+    (ckept.length && ctodo.length ? ` · ${ckept.length} coppie dal file` : '') + (pcOcc ? ` ⚠ il ${pc0} era già usato dagli individuali: le coppie partono dal ${pc1}` : '') +
+    (pmOcc ? ` ⚠ il ${pm} era già usato: le miste partono dal ${pmOcc}` : '');
   $('g-atl').value = [H].concat(T.rows).map(r => r.join('\t')).join('\n'); $('g-sez').value = sez.join('\n');
   atlPreview();
   const g2s = g2.length + kept.filter(r => grp(r) === 2).length;
@@ -1085,7 +1104,7 @@ if (!load('form') && window.NWS_CIRCUITO) setTimeout(() => { $('g-stage').value 
   atlPreview();   // riempie i menu delle colonne, poi rimette la scelta salvata
   if (s){ $('g-colp').value = s['g-colp'] || ''; $('g-colc').value = s['g-colc'] || ''; atlPreview(); }
 })();
-function saveForm(){ const f = {}; ['g-spar','g-tappa','g-code','g-data','g-ng','g-nc','g-var','g-post','g-scarto','g-tipo','g-squadre','g-pettsq','g-asdmix','g-pari0','g-pari1','g-pari2','g-sez','g-atl','g-colp','g-colc','g-p1','g-ord','g-man','g-max','g-ris','g-pc','g-stage', ...[...Array(NDEC)].flatMap((_, i) => ['g-dj' + i, 'g-dg' + i])].forEach(k => f[k] = v(k)); store('form', f); }
+function saveForm(){ const f = {}; ['g-spar','g-tappa','g-code','g-data','g-ng','g-nc','g-var','g-post','g-scarto','g-tipo','g-squadre','g-pettsq','g-asdmix','g-pari0','g-pari1','g-pari2','g-sez','g-atl','g-colp','g-colc','g-p1','g-ord','g-man','g-max','g-ris','g-pc','g-rc','g-pm','g-rm','g-stage', ...[...Array(NDEC)].flatMap((_, i) => ['g-dj' + i, 'g-dg' + i])].forEach(k => f[k] = v(k)); store('form', f); }
 /* anteprima dell'elenco atleti: colonne riconosciute e menu per sceglierle a mano */
 function atlPreview(){
   if (assignAsk){ assignAsk = null; $('b-assign').textContent = 'Assegna pettorali'; $('assign-info').textContent = ''; }
