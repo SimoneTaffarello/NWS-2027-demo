@@ -241,6 +241,7 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
         <div class="row" style="margin-top:8px">
           <button class="btn sec" id="b-assign">Assegna pettorali</button>
           <button class="btn sec" id="b-export">Scarica elenco con pettorali</button>
+          <button class="btn sec" id="b-riserva">Scarica foglio di riserva</button>
         </div>
         <p class="hint" id="assign-info">Prima il Gruppo 1, poi gli indifferenti fino a riempire le prime due manche, poi il Gruppo 2, poi gli indifferenti rimasti. I pettorali già scritti nel file restano; le riserve vanno in coda all'ultima manche. Coppie dal primo pettorale coppie (se è occupato, dalla prima decina libera): prima i camminatori, poi gli istruttori, poi le loro riserve; le miste partono dalla decina successiva (o dal primo pettorale miste, se indicato), con le loro riserve in coda. Le sezioni si scrivono da sole.</p></div>
     </div>
@@ -310,7 +311,7 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 'use strict';
-const VERSION = '0.9.0';
+const VERSION = '0.11.0';
 document.getElementById('ver').textContent = VERSION;
 { const hv = document.createElement('span'); hv.className = 'hsub'; hv.style.marginLeft = 'auto'; hv.textContent = 'v' + VERSION; const hd = document.querySelector('header'); if (hd) hd.appendChild(hv); }
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
@@ -330,11 +331,15 @@ const ZB = [['S', 2, 'piede-bacino-spalle · sguardo avanti'],
   ['I', 3, 'tallone → avampiede · piede-bastone insieme · bastone tra i piedi']];
 const ZBN = {S:'SUPERIORE', C:'CENTRALE', I:'INFERIORE', K:'SINCRONIA'};
 const NUM_COL = '#4a4a4a';      // colore dei numeri stampati dentro i cerchi
-const G = {W:297,H:210,FID:6,FIDP:[[4,4],[287,4],[4,200],[287,200]],TX:4,TW:289,TY:24,H1:4.6,H2:3.2,H3:14,RH:6.0,NR:25,
-           FIX:[10,6,6.5],QR:{x:265,y:3.4,s:14},R:2.4};
-G.RY = G.TY + G.H1 + G.H2 + G.H3;                // 45.8
+// schede versione 3 (QR NWS3): intestazione più bassa, righe più alte, totale scritto a mano per ogni giro e per la riga
+const G = {W:297,H:210,FID:6,FIDP:[[4,4],[287,4],[4,200],[287,200]],TX:4,TW:289,TY:18.5,H1:4.4,H2:3.2,H3:11,RH:6.4,NR:25,
+           FIX:[10,6,6.5],QR:{x:265,y:3.4,s:14},R:2.4,DB:5.2,DG:.6,DM:.7};
+G.TB = 2*G.DB + G.DG + 2*G.DM;                   // riquadro di un totale: due quadratini per le cifre
+G.RY = G.TY + G.H1 + G.H2 + G.H3;                // 37.1 (righe fino a 197.1)
 G.PB = G.FIX[0] + G.FIX[1];                      // colonna pettorali, ripetuta prima del 2° giro
-G.GW = (G.TW - G.FIX.reduce((a,b)=>a+b,0) - G.PB) / 2;   // larghezza di un giro
+G.GW = (G.TW - G.FIX.reduce((a,b)=>a+b,0) - G.PB - G.TB) / 2;   // larghezza di un giro, compreso il suo totale
+G.UW = G.GW - G.TB;                              // larghezza dei cerchi di un giro
+G.FX = G.TX + G.TW - G.TB;                       // totale della riga (1° + 2° giro), sul bordo destro
 const giroX = g => G.TX + G.FIX[0] + G.FIX[1] + G.FIX[2] + g*(G.GW + G.PB);
 G.FC = G.FIDP.map(([x,y]) => [x + G.FID/2, y + G.FID/2]); // centri dei riferimenti
 
@@ -358,32 +363,33 @@ function layout(sh){
       units = [{k:'AE',u:1,t:'b'}];
       ZB.forEach(([z, n]) => { for (let v = 0; v <= n; v++) units.push({k:'Z'+z+v,u:1,t:'b',z,val:v}); });
       if (coppie) SYNC.forEach(n => units.push({k:'Y'+n,u:1,t:'b',z:'K',val:n}));
-      const cw = G.GW / units.reduce((a,b)=>a+b.u,0);
+      const cw = G.UW / units.reduce((a,b)=>a+b.u,0);
       let x = x0; units.forEach(u => { u.x = x; u.w = u.u*cw; x += u.w; });
     } else if (sh.kind === 'campo'){
       units = [{k:'AE',u:1,t:'b'}].concat(TEC.map(i=>({k:i[0],u:1,t:'b',z:i[2],lab:i[1]})),
-              coppie ? SYNC.map(n => ({k:'Y'+n,u:1,t:'b',z:'K',val:n})) : [],
-              [{k:'D1',u:1,t:'d'},{k:'D2',u:1,t:'d'}]);
-      const cw = G.GW / units.reduce((a,b)=>a+b.u,0);
+              coppie ? SYNC.map(n => ({k:'Y'+n,u:1,t:'b',z:'K',val:n})) : []);
+      const cw = G.UW / units.reduce((a,b)=>a+b.u,0);
       let x = x0; units.forEach(u => { u.x = x; u.w = u.u*cw; x += u.w; });
     } else {
-      const ns = coppie ? 5 : 0, kw = 5.4;
-      const vw = G.GW - ns*kw;
+      const ns = coppie ? 5 : 0, kw = 4.4;   // sincronia stretta: lo spazio va alla scala 0–20
+      const vw = G.UW - ns*kw;
       units = [{k:'V',x:x0,w:vw,t:'v'}];
       let x = x0 + vw;
       if (coppie) SYNC.forEach(n => { units.push({k:'Y'+n,x,w:kw,t:'b',z:'K',val:n}); x += kw; });
     }
     L.cols.push(units);
+    // totale del giro scritto a mano, due quadratini: scheda A = D1/D2 (l'app controlla che sia scritto), altrimenti T1/T2 (solo per il controllo a mano)
+    const dk = sh.kind === 'campo' && sh.variant !== 'B' ? 'D' : 'T';
+    for (let r = 0; r < G.NR; r++) if (sh.rows[r]) digitBoxes(L, r, g, dk, x0 + G.UW);
     for (let r = 0; r < G.NR; r++){
       if (!sh.rows[r]) continue;
       const y = G.RY + r*G.RH, cy = y + G.RH/2;
       units.forEach(u => {
         if (u.t === 'b') L.bubbles.push({row:r,giro:g,key:u.k,val:u.val,cx:u.x+u.w/2,cy,r:u.val !== undefined ? Math.min(G.R, u.w*.42) : G.R});
         else if (u.t === 'q') L.bubbles.push({row:r,giro:g,key:u.k,cx:u.x+u.w/2,cy,r:1.9,sq:1});
-        else if (u.t === 'd') L.boxes.push({row:r,giro:g,key:u.k,x:u.x+.7,y:y+.7,w:u.w-1.4,h:G.RH-1.4});
         else if (u.t === 's') L.boxes.push({row:r,giro:g,key:u.k,x:u.x+.6,y:y+.6,w:u.w-1.2,h:G.RH-1.2});
         else if (u.t === 'v'){
-          const m = 1.5, gap = .9, p = (u.w - 2*m - 4*gap) / 21, rr = Math.min(G.R, p*.44);
+          const m = 1, gap = .6, p = (u.w - 2*m - 4*gap) / 21, rr = Math.min(G.R, p*.44);
           for (let v = 0; v <= 20; v++){
             const cx = u.x + m + p/2 + v*p + Math.floor(v/5)*gap;
             L.bubbles.push({row:r,giro:g,key:'V'+v,val:v,cx,cy,r:rr});
@@ -392,7 +398,13 @@ function layout(sh){
       });
     }
   }
+  for (let r = 0; r < G.NR; r++) if (sh.rows[r]) digitBoxes(L, r, 2, 'F', G.FX);   // totale della riga
   return L;
+}
+// due quadratini per le cifre di un totale, dentro il riquadro che parte da x
+function digitBoxes(L, r, giro, k, x){
+  const y = G.RY + r*G.RH + (G.RH - G.DB)/2;
+  [0, 1].forEach(i => L.boxes.push({row:r, giro, key:k + (i+1), x:x + G.DM + i*(G.DB + G.DG), y, w:G.DB, h:G.DB}));
 }
 
 /* ======================= DISEGNO SVG ======================= */
@@ -418,112 +430,111 @@ const ABBR = [['3 passi in alternato con appoggio + 3 con bastoncini sospesi', '
   ['Parallelo a 3 con bastoncini sospesi', 'P3 sospeso'], ['3 passi in monobraccio + 2 in monobraccio', '3 + 2 monobraccio'],
   ['1 parallelo a 2 + 3 passi in monobraccio', '1 P2 + 3 monobraccio'], ['Parallelo a 2', 'P2'], ['Parallelo a 3', 'P3']];
 const abbrev = t => ABBR.reduce((s, [a, b]) => s.split(a).join(b), String(t || ''));
+// carattere più grande possibile per far stare un testo in una larghezza (k = larghezza media di un carattere / corpo)
+const fitFs = (t, w, max, k = .58) => Math.min(max, w / (String(t).length * k));
 function sheetSVG(sh){
-  const L = layout(sh), coppie = sh.type !== 'IND', o = [];
+  const L = layout(sh), coppie = sh.type !== 'IND', campo = sh.kind === 'campo', o = [];
   const tot = G.RY + G.NR*G.RH, g0x = giroX(0), p2x = giroX(0) + G.GW;   // p2x: pettorali ripetuti
   o.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${G.W} ${G.H}" width="${G.W}mm" height="${G.H}mm" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">`);
   o.push(`<rect width="${G.W}" height="${G.H}" fill="#fff"/>`);
   G.FIDP.forEach(([x,y]) => o.push(`<rect x="${x}" y="${y}" width="${G.FID}" height="${G.FID}" fill="#000"/>`));
-  // testata
-  o.push(txt(13, 7.2, 'NORDIC WALKING STYLE · CIRCUITO ' + (sh.anno || new Date().getFullYear()) + ' · v' + VERSION, {fs:1.8, fill:'#555', ls:.15}));
-  o.push(txt(13, 11.6, sh.title, {fs:3.6, fw:800, fill:'#c0392b'}));
-  o.push(txt(13, 15.6, sh.subtitle, {fs:2.2, fw:700}));
-  const meta = sh.meta; let mx = 80;   // dopo il titolo più lungo (GIUDICE DI CAMPO · COPPIE)
-  meta.forEach(([k, v, w]) => {
-    o.push(txt(mx, 7.4, k.toUpperCase(), {fs:1.6, fill:'#666', ls:.1}));
-    o.push(txt(mx, 12, v, {fs:2.7, fw:600}));
-    o.push(`<line x1="${mx}" y1="13.6" x2="${mx+w-2.5}" y2="13.6" stroke="#999" stroke-width=".25"/>`);
+  // testata compatta: titolo e giudice a sinistra, dati della gara e istruzioni al centro, QR a destra
+  o.push(txt(13, 6.6, 'NORDIC WALKING STYLE · CIRCUITO ' + (sh.anno || new Date().getFullYear()) + ' · v' + VERSION, {fs:1.9, fill:'#555', ls:.15}));
+  o.push(txt(13, 11.4, sh.title, {fs:4, fw:800, fill:'#c0392b'}));
+  o.push(txt(13, 16.5, sh.subtitle, {fs:2.9, fw:700}));
+  let mx = 84;   // dopo il titolo più lungo (GIUDICE DI CAMPO · COPPIE)
+  sh.meta.forEach(([k, v, w]) => {
+    o.push(txt(mx, 6.4, k.toUpperCase(), {fs:1.8, fill:'#666', ls:.1}));
+    o.push(txt(mx, 11.2, v, {fs:fitFs(v || 'x', w - 3, 3.1, .56), fw:600}));
+    o.push(`<line x1="${mx}" y1="12.6" x2="${mx+w-2.5}" y2="12.6" stroke="#999" stroke-width=".25"/>`);
     mx += w;
   });
   o.push(qrPath(sh.payload, G.QR.x, G.QR.y, G.QR.s));
-  // istruzioni
-  o.push(txt(13, 21, sh.ins, {fs:2.6, fill:'#222'}));
-  // intestazione pettorali
+  o.push(txt(84, 16.7, sh.ins, {fs:fitFs(sh.ins, G.QR.x - 86, 2.7, .54), fill:'#222'}));
+  // intestazione pettorali e assenti
   const ind = sh.type === 'IND';   // individuali: solo il pettorale, la categoria non si stampa
   [G.TX, p2x].forEach(px => {
     o.push(`<rect x="${px}" y="${G.TY}" width="${G.PB}" height="${G.RY-G.TY}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
-    o.push(txt(px+G.PB/2, G.TY+9, 'PETT.', {fs:2.4, fw:700, a:'middle'}));
-    if (!ind) o.push(txt(px+G.PB/2, G.TY+12, 'Cat.', {fs:1.8, fill:'#555', a:'middle'}));
+    o.push(txt(px+G.PB/2, G.TY+9, 'PETT.', {fs:3, fw:800, a:'middle'}));
+    if (!ind) o.push(txt(px+G.PB/2, G.TY+12.5, 'Cat.', {fs:2.3, fill:'#555', a:'middle'}));
   });
   const ax = G.TX+G.FIX[0]+G.FIX[1];
   o.push(`<rect x="${ax}" y="${G.TY}" width="${G.FIX[2]}" height="${G.RY-G.TY}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
-  o.push(txt(ax+G.FIX[2]/2+.8, G.RY-1.2, 'ASSENTE', {fs:2, fw:800, tr:`rotate(-90 ${ax+G.FIX[2]/2+.8} ${G.RY-1.2})`}));
+  o.push(txt(ax+G.FIX[2]/2+.9, G.RY-1.4, 'ASSENTE', {fs:2.4, fw:800, tr:`rotate(-90 ${ax+G.FIX[2]/2+.9} ${G.RY-1.4})`}));
+  // totale della riga: in fondo a destra
+  const rng = (a, b) => `${String(a).padStart(2, '0')}–${b}`, tmax = campo ? (coppie ? 15 : 10) : (coppie ? 25 : 20);
+  o.push(`<rect x="${G.FX}" y="${G.TY}" width="${G.TB}" height="${G.RY-G.TY}" fill="#fff" stroke="#111" stroke-width=".35"/>`);
+  [['TOTALE', 2.3, 800, 5.2], ['1° + 2°', 2.1, 600, 8.8], ['giro', 2.1, 600, 11.6], [rng(0, 2*tmax), 1.9, 400, 16.2]].forEach(([t, fs, fw, dy]) =>
+    o.push(txt(G.FX + G.TB/2, G.TY + dy, t, {fs, fw, a:'middle', fill: fw < 500 ? '#555' : '#111'})));
   // intestazioni giri
   for (let g = 0; g < 2; g++){
-    const x0 = giroX(g), U = L.cols[g];
+    const x0 = giroX(g), U = L.cols[g], tbx = x0 + G.UW;
     o.push(`<rect x="${x0}" y="${G.TY}" width="${G.GW}" height="${G.H1}" fill="#fff" stroke="#111" stroke-width=".35"/>`);
-    const gt = sh.kind === 'campo' ? `${g+1}° GIRO · POSTAZIONE ${g ? sh.post2 : sh.post1}` : `${g+1}° GIRO`;
-    const gs = sh.kind === 'campo' ? ` · Prova: ${g ? sh.prova2 : sh.prova1}` : ' · Gesto tecnico complessivo nella tecnica alternata';
+    const gt = campo ? `${g+1}° GIRO · POSTAZIONE ${g ? sh.post2 : sh.post1}` : `${g+1}° GIRO`;
+    const gs = campo ? ` · Prova: ${g ? sh.prova2 : sh.prova1}` : ' · Gesto tecnico complessivo nella tecnica alternata';
     // testo lungo (mix con più andature): prima le abbreviazioni standard, poi, se serve ancora, carattere più piccolo
-    const fit = t => Math.min(1, (G.GW - 3) / (gt.length * 2.5 * .62 + t.length * 2.1 * .54));
-    let gs2 = gs; if (fit(gs) < 1 && sh.kind === 'campo') gs2 = ' · Prova: ' + abbrev(g ? sh.prova2 : sh.prova1);
+    const fit = t => Math.min(1, (G.GW - 3) / (gt.length * 2.8 * .62 + t.length * 2.4 * .54));
+    let gs2 = gs; if (fit(gs) < 1 && campo) gs2 = ' · Prova: ' + abbrev(g ? sh.prova2 : sh.prova1);
     const fk = fit(gs2);
-    o.push(`<text x="${x0+G.GW/2}" y="${G.TY+3.3}" font-size="${(2.5*fk).toFixed(2)}" fill="#111" text-anchor="middle"><tspan font-weight="800">${esc(gt)}</tspan><tspan font-size="${(2.1*fk).toFixed(2)}">${esc(gs2)}</tspan></text>`);
-    // fascia zone
-    const zy = G.TY + G.H1;
-    const spans = [];
+    o.push(`<text x="${x0+G.GW/2}" y="${G.TY+3.25}" font-size="${(2.8*fk).toFixed(2)}" fill="#111" text-anchor="middle"><tspan font-weight="800">${esc(gt)}</tspan><tspan font-size="${(2.4*fk).toFixed(2)}">${esc(gs2)}</tspan></text>`);
+    // fascia zone (il riquadro del totale in nero)
+    const zy = G.TY + G.H1, spans = [];
     U.forEach(u => {
-      let z = u.t === 'b' ? (u.z || 'AE') : (u.t === 'v' ? 'V' : 'CTRL');
-      if (spans.length && spans[spans.length-1].z === z) { spans[spans.length-1].w += u.w; }
+      const z = u.t === 'b' ? (u.z || 'AE') : 'V';
+      if (spans.length && spans[spans.length-1].z === z) spans[spans.length-1].w += u.w;
       else spans.push({z, x:u.x, w:u.w});
     });
+    spans.push({z: 'TOT', x: tbx, w: G.TB});
     spans.forEach(s => {
-      const [lab, col] = s.z === 'AE' ? ['AE','#c0392b'] : s.z === 'V' ? ['ARMONIA, FLUIDITÀ E DINAMICITÀ · 0–20','#b8860b'] :
-                         s.z === 'CTRL' ? [s.w < 14 ? 'CONTR.' : 'CONTROLLO','#111'] : [s.z === 'K' && sh.kind === 'capo' ? 'SINCR. 1–5' : sh.variant === 'B' ? ZBN[s.z] : ZONE[s.z][0], ZONE[s.z][1]];
+      const [lab, col] = s.z === 'AE' ? ['AE','#c0392b'] : s.z === 'V' ? ['ARMONIA, FLUIDITÀ E DINAMICITÀ · 0–20','#b8860b'] : s.z === 'TOT' ? ['TOTALE','#6b6b6b'] :
+                         [s.z === 'K' && !campo ? 'SINCR. 1–5' : sh.variant === 'B' ? ZBN[s.z] : ZONE[s.z][0], ZONE[s.z][1]];
       o.push(`<rect x="${s.x}" y="${zy}" width="${s.w}" height="${G.H2}" fill="${col}" stroke="#fff" stroke-width=".15"/>`);
-      o.push(txt(s.x+s.w/2, zy+2.35, lab, {fs:1.75, fw:700, fill:'#fff', a:'middle', ls:.1}));
+      o.push(txt(s.x+s.w/2, zy+2.4, lab, {fs:fitFs(lab, s.w - .8, 2, .66), fw:700, fill:'#fff', a:'middle', ls:.1}));
     });
     // etichette colonne
-    const ly = zy + G.H2, lb = G.RY - 1;
+    const ly = zy + G.H2, lb = G.RY - .9, box = (x, w) => o.push(`<rect x="${x}" y="${ly}" width="${w}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
+    box(tbx, G.TB);
+    [['TOTALE', 2.3, 800, 3.6], ['del giro', 2, 600, 6.5], [rng(0, tmax), 1.9, 400, 9.5]].forEach(([t, fs, fw, dy]) =>
+      o.push(txt(tbx + G.TB/2, ly + dy, t, {fs, fw, a:'middle', fill: fw < 500 ? '#555' : '#111'})));
     U.forEach(u => {
       if (u.k[0] === 'Y'){
         const ys = U.filter(z => z.k[0] === 'Y'); if (u !== ys[0]) return;
-        const w5 = ys.reduce((t, z) => t + z.w, 0);
-        o.push(`<rect x="${u.x}" y="${ly}" width="${w5}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
-        o.push(txt(u.x+w5/2, ly+5.2, 'Annerisci', {fs:1.9, a:'middle'}));
-        o.push(txt(u.x+w5/2, ly+8, 'UN SOLO voto', {fs:2.1, fw:800, a:'middle'}));
-        o.push(txt(u.x+w5/2, ly+10.8, 'da 1 a 5', {fs:1.9, a:'middle'}));
+        const w5 = ys.reduce((t, z) => t + z.w, 0); box(u.x, w5);
+        o.push(txt(u.x+w5/2, ly+3.3, 'Annerisci', {fs:fitFs('Annerisci', w5 - 1, 2.1), a:'middle'}));
+        o.push(txt(u.x+w5/2, ly+6.4, 'UN SOLO voto', {fs:fitFs('UN SOLO voto', w5 - 1, 2.4, .62), fw:800, a:'middle'}));
+        o.push(txt(u.x+w5/2, ly+9.4, 'da 1 a 5', {fs:fitFs('da 1 a 5', w5 - 1, 2.1), a:'middle'}));
         return;
       }
       if (u.k[0] === 'Z'){
-        // promemoria dei criteri della zona, sopra i suoi cerchi
+        // promemoria dei criteri della zona, sopra i suoi cerchi: carattere più grande che sta in 3 righe
         const zs = U.filter(z => z.z === u.z); if (u !== zs[0]) return;
-        const wz = zs.reduce((t, z) => t + z.w, 0), [, n, crit] = ZB.find(z => z[0] === u.z);
-        o.push(`<rect x="${u.x}" y="${ly}" width="${wz}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
-        wrap(crit, Math.floor((wz - 1.2) / .82)).slice(0, 4).forEach((l, i) => o.push(txt(u.x+wz/2, ly+2.5+i*2.05, l, {fs:1.5, fill:'#333', a:'middle'})));
-        o.push(txt(u.x+wz/2, ly+12.6, `da ${n}: −1 per errore`, {fs:1.6, fw:800, a:'middle'}));
+        const wz = zs.reduce((t, z) => t + z.w, 0), [, n, crit] = ZB.find(z => z[0] === u.z); box(u.x, wz);
+        let fs = 1.9, lines; while ((lines = wrap(crit, Math.floor((wz - 1) / (fs * .52)))).length > 3 && fs > 1.3) fs -= .05;
+        lines.slice(0, 3).forEach((l, i) => o.push(txt(u.x+wz/2, ly+2.3+i*fs*1.15, l, {fs, fill:'#333', a:'middle'})));
+        const t = `da ${n}: −1 per errore`;
+        o.push(txt(u.x+wz/2, ly+G.H3-1.1, t, {fs:fitFs(t, wz - 1, 2.1, .6), fw:800, a:'middle'}));
         return;
       }
-      if (u.k !== 'D1' && u.k !== 'D2') o.push(`<rect x="${u.x}" y="${ly}" width="${u.w}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
+      box(u.x, u.w);
       if (u.t === 'v'){
-        o.push(txt(u.x+u.w/2, ly+6, 'Annerisci UN SOLO cerchio da 0 a 20', {fs:2.1, fw:600, a:'middle'}));
-        o.push(txt(u.x+u.w/2, ly+9, 'postura · fluidità · eleganza · correttezza tecnica · dinamicità', {fs:1.7, fill:'#666', a:'middle'}));
+        const t1 = 'Annerisci UN SOLO cerchio da 0 a 20', t2 = 'postura · fluidità · eleganza · correttezza tecnica · dinamicità';
+        o.push(txt(u.x+u.w/2, ly+4.6, t1, {fs:fitFs(t1, u.w - 2, 2.6, .58), fw:700, a:'middle'}));
+        o.push(txt(u.x+u.w/2, ly+8.4, t2, {fs:fitFs(t2, u.w - 2, 2.1, .54), fill:'#555', a:'middle'}));
         return;
       }
-      if (u.k === 'D1'){
-        const w2 = u.w*2;
-        o.push(`<rect x="${u.x}" y="${ly}" width="${w2}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
-        o.push(txt(u.x+w2/2, ly+5, sh.kind === 'campo' ? 'TOTALE' : 'VOTO', {fs:2.1, fw:800, a:'middle'}));
-        o.push(txt(u.x+w2/2, ly+8, '2 cifre', {fs:1.7, a:'middle'}));
-        o.push(txt(u.x+w2/2, ly+10.8, sh.kind === 'campo' ? (coppie ? '00–15' : '00–10') : '00–20', {fs:1.7, fill:'#666', a:'middle'}));
-        return;
-      }
-      if (u.k === 'D2') return;
       const cx = u.x + u.w/2;
       let lines;
       if (u.k === 'AE') lines = [['Andatura', 1], ['errata = 0', 1]];
-      else if (u.k === 'NP') lines = [['Non', 1], ['passato', 1]];
-      else if (u.k === 'SG') lines = [['Sigla', 1]];
-      else { const w = wrap(u.lab, 13).slice(0, 2); lines = [[u.k, 1]].concat(w.map(l => [l, 0])); }
+      else { const w = wrap(u.lab, 11).slice(0, 3); lines = [[u.k, 1]].concat(w.map(l => [l, 0])); }
       // testo verticale: righe affiancate, lette dal basso
-      const lh = 2.05, n = lines.length, x0l = cx - (n-1)*lh/2 + .7;
+      const lh = Math.min(2.15, (u.w - 1.2) / lines.length), nl = lines.length, x0l = cx - (nl-1)*lh/2 + .7;
       lines.forEach(([l, b], i) => {
-        const xx = x0l + i*lh;
-        o.push(txt(xx, lb, l, {fs: b ? 1.95 : 1.75, fw: b ? 800 : 400, tr:`rotate(-90 ${xx} ${lb})`}));
+        const xx = x0l + i*lh, fs = Math.min(b ? 2.1 : 1.85, lh * .95, (G.H3 - 1.6) / (l.length * (b ? .68 : .56)));
+        o.push(txt(xx, lb, l, {fs, fw: b ? 800 : 400, tr:`rotate(-90 ${xx} ${lb})`}));
       });
     });
   }
-  // righe
+  // righe: pettorale grande quanto la riga consente
   for (let r = 0; r < G.NR; r++){
     const y = G.RY + r*G.RH, row = sh.rows[r];
     if (!row){
@@ -532,42 +543,41 @@ function sheetSVG(sh){
     }
     if (r % 2) o.push(`<rect x="${G.TX}" y="${y}" width="${G.TW}" height="${G.RH}" fill="#f1f1f1"/>`);   // righe alterne, per seguire la riga
     [G.TX, p2x].forEach(px => {
-      o.push(txt(px + (ind ? G.PB/2 : 5), y + 4.4, row.lab || row.p, {fs: row.lab ? 3.3 : 3.7, fw:800, a:'middle'}));
-      if (!ind) o.push(txt(px + G.FIX[0] + G.FIX[1]/2, y + 4, catLabel(row.cat || ''), {fs:1.9, fill:'#444', a:'middle'}));
+      const t = String(row.lab || row.p), w = ind ? G.PB - 1.2 : G.FIX[0] - .6, fs = fitFs(t, w, 4.9, .7);
+      o.push(txt(px + (ind ? G.PB/2 : G.FIX[0]/2), y + G.RH/2 + fs*.36, t, {fs, fw:800, a:'middle'}));
+      if (!ind) o.push(txt(px + G.FIX[0] + G.FIX[1]/2, y + G.RH/2 + 1, catLabel(row.cat || ''), {fs:fitFs(catLabel(row.cat || '') || 'C/C', G.FIX[1] - .8, 2.7, .62), fill:'#333', a:'middle'}));
     });
   }
   // griglia
-  const vx = new Set([G.TX, ...(ind ? [] : [G.TX+G.FIX[0], p2x+G.FIX[0]]), G.TX+G.FIX[0]+G.FIX[1], g0x, p2x, p2x+G.PB, G.TX+G.TW]);
-  L.cols.forEach(U => U.forEach(u => { if (u.k !== 'D2') vx.add(+u.x.toFixed(3)); }));
+  const vx = new Set([G.TX, ...(ind ? [] : [G.TX+G.FIX[0], p2x+G.FIX[0]]), G.TX+G.FIX[0]+G.FIX[1], g0x, p2x, p2x+G.PB, G.TX+G.TW, G.FX]);
+  L.cols.forEach((U, g) => { U.forEach(u => vx.add(+u.x.toFixed(3))); vx.add(+(giroX(g) + G.UW).toFixed(3)); });
   vx.forEach(x => o.push(`<line x1="${x}" y1="${G.RY}" x2="${x}" y2="${tot}" stroke="#777" stroke-width=".2"/>`));
-  L.cols.forEach(U => { const d2 = U.find(u => u.k === 'D2'); if (d2) o.push(`<line x1="${d2.x}" y1="${G.RY}" x2="${d2.x}" y2="${tot}" stroke="#bbb" stroke-width=".2"/>`); });
   // variante B: separatori spessi tra le zone
   if (sh.variant === 'B') L.cols.forEach(U => U.forEach((u, i) => { if (i && u.z !== U[i-1].z) o.push(`<line x1="${u.x}" y1="${G.RY}" x2="${u.x}" y2="${tot}" stroke="#111" stroke-width=".5"/>`); }));
   for (let r = 0; r <= G.NR; r++){
     const y = G.RY + r*G.RH, th = (r % 5 === 0 && r) ? .55 : .2;
     o.push(`<line x1="${G.TX}" y1="${y}" x2="${G.TX+G.TW}" y2="${y}" stroke="${th > .3 ? '#111' : '#777'}" stroke-width="${th}"/>`);
   }
-  o.push(`<line x1="${g0x}" y1="${G.TY}" x2="${g0x}" y2="${tot}" stroke="#111" stroke-width=".6"/>`);
-  o.push(`<line x1="${p2x}" y1="${G.TY}" x2="${p2x}" y2="${tot}" stroke="#111" stroke-width=".9"/>`);
-  o.push(`<line x1="${p2x+G.PB}" y1="${G.TY}" x2="${p2x+G.PB}" y2="${tot}" stroke="#111" stroke-width=".6"/>`);
-  // cerchi e caselle
+  [[g0x, .6], [p2x, .9], [p2x+G.PB, .6], [giroX(0) + G.UW, .5], [giroX(1) + G.UW, .5], [G.FX, .9]].forEach(([x, w]) =>
+    o.push(`<line x1="${x}" y1="${G.TY}" x2="${x}" y2="${tot}" stroke="#111" stroke-width="${w}"/>`));
+  // cerchi e quadratini delle cifre
   L.bubbles.forEach(b => {
     if (b.sq) o.push(`<rect x="${b.cx-b.r}" y="${b.cy-b.r}" width="${b.r*2}" height="${b.r*2}" rx=".5" fill="none" stroke="#333" stroke-width=".28"/>`);
     else {
       const red = b.key === 'AE';
       o.push(`<circle cx="${b.cx}" cy="${b.cy}" r="${b.r}" fill="none" stroke="${red ? '#c0392b' : '#222'}" stroke-width="${red ? .38 : .28}"/>`);
-      if (b.val !== undefined) o.push(txt(b.cx, b.cy + b.r*.36, b.val, {fs: b.r*1.0, fw:600, fill:NUM_COL, a:'middle'}));
+      if (b.val !== undefined) o.push(txt(b.cx, b.cy + b.r*.4, b.val, {fs: b.r*1.1, fw:600, fill:NUM_COL, a:'middle'}));
     }
   });
   L.boxes.forEach(b => { if (b.key !== 'SG') o.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff" stroke="#111" stroke-width=".45"/>`); });
   // piè di pagina
   const fy = 202.6;
-  o.push(txt(13, fy, 'Firma ' + (sh.kind === 'campo' ? 'giudice' : 'giudice capo'), {fs:1.9}));
-  o.push(`<line x1="40" y1="${fy+.6}" x2="128" y2="${fy+.6}" stroke="#111" stroke-width=".25"/>`);
-  o.push(txt(134, fy, 'Ora consegna', {fs:1.9}));
-  o.push(`<line x1="154" y1="${fy+.6}" x2="178" y2="${fy+.6}" stroke="#111" stroke-width=".25"/>`);
-  o.push(`<rect x="183" y="${fy-2.4}" width="3" height="3" fill="none" stroke="#111" stroke-width=".3"/>`);
-  o.push(txt(187.5, fy, 'Foto di controllo scattata', {fs:1.9}));
+  o.push(txt(13, fy, 'Firma ' + (campo ? 'giudice' : 'giudice capo'), {fs:2.3}));
+  o.push(`<line x1="${campo ? 33 : 38}" y1="${fy+.6}" x2="128" y2="${fy+.6}" stroke="#111" stroke-width=".25"/>`);
+  o.push(txt(132, fy, 'Ora consegna', {fs:2.3}));
+  o.push(`<line x1="149" y1="${fy+.6}" x2="174" y2="${fy+.6}" stroke="#111" stroke-width=".25"/>`);
+  o.push(`<rect x="178" y="${fy-2.5}" width="3" height="3" fill="none" stroke="#111" stroke-width=".3"/>`);
+  o.push(txt(182.5, fy, 'Foto di controllo scattata', {fs:2.3}));
   o.push(txt(284, fy - 3.4, 'CODICE SCHEDA', {fs:1.5, fill:'#666', a:'end', ls:.1}));
   o.push(`<text x="284" y="${fy + .4}" font-size="3.4" font-weight="700" fill="#111" text-anchor="end" font-family="DejaVu Sans Mono, Consolas, monospace">${esc(sh.payload)}</text>`);
   o.push('</svg>');
@@ -577,12 +587,12 @@ function sheetSVG(sh){
 /* ======================= GARA → SCHEDE ======================= */
 function chk(s){ let t = 0; for (const c of s) t = (t*31 + c.charCodeAt(0)) % 1679; return (t % 36).toString(36).toUpperCase(); }
 function makePayload(code, sec, judge, f, p1, p2){
-  const base = `NWS2.${code}.${sec}.${judge}.F${f}.${p1}.${p2}`;
+  const base = `NWS3.${code}.${sec}.${judge}.F${f}.${p1}.${p2}`;
   return base + '.' + chk(base);
 }
 function parsePayload(s){
-  if (/^NWS1\./.test((s||'').trim().toUpperCase())) return {old: true};
-  const m = /^NWS2\.([A-Z0-9]+)\.(\d+)(IND|COP|MIX)\.(G\d+B?|C\d+)\.F(\d+)\.(\d+)\.(\d+)\.([0-9A-Z])$/.exec((s||'').trim().toUpperCase());
+  if (/^NWS[12]\./.test((s||'').trim().toUpperCase())) return {old: true};
+  const m = /^NWS3\.([A-Z0-9]+)\.(\d+)(IND|COP|MIX)\.(G\d+B?|C\d+)\.F(\d+)\.(\d+)\.(\d+)\.([0-9A-Z])$/.exec((s||'').trim().toUpperCase());
   if (!m) return null;
   const base = s.trim().toUpperCase().slice(0, -2);
   return {code:m[1], sec:+m[2], type:m[3], judge:m[4].replace(/B$/, ''), variant: /B$/.test(m[4]) ? 'B' : 'A',
@@ -745,7 +755,7 @@ function assignBibs(confirmed){
   const rm = u2.length ? take(nrm, Math.max(...u2.map(u => u.b)) + 1) : [];
   const f1 = u1.map(u => u.b), f2 = u2.map(u => u.b), nC = u1.filter(u => u.cat === 'CC').length;
   if (f1.length) sez.push(`COP | Coppie Istruttori e Camminatori | ${ranges(f1.concat(rc)).join(', ')}`);
-  if (f2.length) sez.push(`COP | Coppie Miste | ${ranges(f2.concat(rm)).join(', ')}`);
+  if (f2.length) sez.push(`COP | Coppie Miste | ${ranges(f2.concat(rm)).map(r => r + ' CI').join(', ')}`);   // anche le riserve miste sono C/I
   const span = ps => { const s = ps.slice().sort((a, b) => a - b); return s.length > 1 ? `${s[0]}–${s[s.length-1]}` : `${s[0]}`; };
   const copMsg = !units.length ? '' :
     ` · coppie camminatori ${nC}, istruttori ${u1.length - nC}` + (f1.length ? ` (${span(f1)})` : '') + (rc.length ? `, riserve ${span(rc)}` : '') +
@@ -845,7 +855,7 @@ function readGara(){
     if (x && x.cat && !ca) throw new Error(`Atleti: pettorale ${a.p}, categoria "${x.cat}" non valida per le coppie (CC, CI o II)`);
     if (a.cat && ca && a.cat !== ca) throw new Error(`Pettorale ${a.p}: categoria ${catLabel(a.cat)} nelle sezioni ma ${catLabel(ca)} nell'elenco atleti`);
     a.cat = a.cat || ca;
-    if (!a.cat) throw new Error(`Pettorale ${a.p}: manca la categoria della coppia (CC, CI o II)`);
+    if (!a.cat && x) throw new Error(`Pettorale ${a.p}: manca la categoria della coppia (CC, CI o II)`);   // riserva senza atleti: categoria vuota
   }));
   return {
     tappa: v('g-tappa'), code: v('g-code').toUpperCase().replace(/[^A-Z0-9]/g,''), data: v('g-data'),
@@ -881,15 +891,14 @@ function buildSheets(gara){
           title: sec.type === 'IND' ? 'GIUDICE DI CAMPO' : 'GIUDICE DI CAMPO · COPPIE', subtitle: `Giudice G${j}` + (vB ? ' · scheda a zone' : ''),
           post1, post2, prova1: prova(post1), prova2: prova(post2), anno: gara.anno,
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice', '', 58]],
-          ins: vB ? 'Pennarello nero · un cerchio per zona' + sync + corr :
-               'Pennarello nero · un cerchio per elemento corretto · totale a due cifre (08)' + sync + corr,
+          ins: (vB ? 'Pennarello nero · un cerchio per zona' : 'Pennarello nero · un cerchio per elemento corretto') + sync + ' · totali: una cifra per quadratino (08)' + corr,
           payload: makePayload(gara.code, sec2, 'G'+j+(vB ? 'B' : ''), fi+1, p1, p2)});
       }
       for (let c = 1; c <= gara.nc; c++){
         sheets.push({kind:'capo', type:sec.type, judge:'C'+c, sec:sec.idx, foglio:fi+1, rows, anno: gara.anno,
           title: sec.type === 'IND' ? 'GIUDICE CAPO' : 'GIUDICE CAPO · COPPIE', subtitle: gara.nc > 1 ? `Giudice capo ${c}` : 'Giudice capo',
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice capo', '', 58]],
-          ins: 'Pennarello nero · un solo voto per giro' + sync + corr,
+          ins: 'Pennarello nero · un solo voto per giro' + sync + ' · totali: una cifra per quadratino (08)' + corr,
           payload: makePayload(gara.code, `${sec.idx}${sec.type}`, 'C'+c, fi+1, p1, p2)});
       }
     });
@@ -1159,6 +1168,276 @@ $('b-export').onclick = async () => {
     X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(E.ind), E.nome || 'Individuali');
     if (E.cop) X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(E.cop), 'Coppie');
     X.writeFile(wb, `pettorali_${v('g-code') || 'gara'}.xlsx`);
+  } catch(e){ $('assign-info').textContent = '⚠ ' + e.message; }
+};
+/* ======================= FOGLIO DI RISERVA (piano B se l'app si blocca in gara) =======================
+   File Excel da riempire a mano dalle schede cartacee, con le regole della gara: Tot. giudici (capo compreso), scarto per giro,
+   spareggio a cascata o decimali. Si scarica la sera prima e funziona senza internet in Excel e in Google Fogli: solo formule
+   classiche (SUM, SUMPRODUCT, INDEX, MATCH, CHOOSE…), niente LET/FILTER/SORT/XLOOKUP, niente criteri di testo (virgola o punto).
+   SheetJS gratuito non scrive convalida e colori: l'XML si scrive qui e si comprime con il suo zip (XLSX.CFB).
+   Spareggio a cascata come spareggioCascata, con una catena di RIS_PASSI passi nel foglio Calcolo: a ogni passo "gruppo" = chi è
+   ancora pari, "crit" = criterio in uso (0 votazione, 1 capo, 2-4 zone C/I/S, 5 voto minimo, 6 finito). Se il criterio divide il
+   gruppo si riparte dalla votazione tra i rimasti, altrimenti si passa al criterio dopo. La votazione vale 2 punti per giudice
+   (1 se pari) per restare in numeri interi. Le zone si battono solo per le righe dove servono (colorate di arancio). */
+const RIS_PASSI = 20, RIS_D = 3;   // RIS_D: prima riga dei dati nei fogli delle sezioni (0 = riga 1)
+const RIS_LAB = [['camminatore-f', 'Camminatrice'], ['camminatore-m', 'Camminatore'], ['istruttore-f', 'Istruttrice'], ['istruttore-m', 'Istruttore'],
+  ['coppia-camm', 'Coppia Camminatori'], ['coppia-istr', 'Coppia Istruttori'], ['coppia-miste', 'Coppia Mista']];
+const colL = n => { let s = ''; for (n++; n; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };   // 0 → A
+const xRef = (c, r, abs) => abs ? `$${colL(c)}$${r + 1}` : colL(c) + (r + 1);
+const xRng = (c, r1, r2) => `$${colL(c)}$${r1 + 1}:$${colL(c)}$${r2 + 1}`;
+const xQ = name => `'${name.replace(/'/g, "''")}'!`;
+const xF = f => ({f});
+// stili: 1 titolo di colonna, 2 titolo del foglio, 3 da battere, 4 calcolato, 5 totale, 6 testo, 7 nota, 8 grassetto
+function xSheet(name){ return {name, cells: {}, cols: {}, merges: [], dv: [], cf: [], freeze: null}; }
+function xSet(ws, r, c, v, s){ (ws.cells[r] = ws.cells[r] || {})[c] = {v, s}; }
+function xSheetXml(ws){
+  let pr = 0;
+  const cols = Object.keys(ws.cols).map(Number).sort((a, b) => a - b).map(c => `<col min="${c+1}" max="${c+1}" width="${ws.cols[c]}" customWidth="1"/>`).join('');
+  const rows = Object.keys(ws.cells).map(Number).sort((a, b) => a - b).map(r => `<row r="${r+1}">` +
+    Object.keys(ws.cells[r]).map(Number).sort((a, b) => a - b).map(c => {
+      const {v, s} = ws.cells[r][c], at = ` r="${xRef(c, r)}"` + (s ? ` s="${s}"` : '');
+      return v && typeof v === 'object' ? `<c${at}><f>${esc(v.f)}</f></c>` : typeof v === 'number' ? `<c${at}><v>${v}</v></c>` :
+        v === '' || v == null ? `<c${at}/>` : `<c${at} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+    }).join('') + '</row>').join('');
+  const [fx, fy] = ws.freeze || [0, 0];
+  const pane = fx || fy ? `<pane${fx ? ` xSplit="${fx}"` : ''}${fy ? ` ySplit="${fy}"` : ''} topLeftCell="${xRef(fx, fy)}" activePane="${fx && fy ? 'bottomRight' : fx ? 'topRight' : 'bottomLeft'}" state="frozen"/>` : '';
+  const dv = d => d.list
+    ? `<dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Valore non ammesso" error="${esc(d.msg || 'Scegli dall\'elenco')}" sqref="${d.sq}"><formula1>"${esc(d.list)}"</formula1></dataValidation>`
+    : `<dataValidation type="whole" operator="between" allowBlank="1" showErrorMessage="1" errorTitle="Valore non ammesso" error="${esc(d.msg)}" sqref="${d.sq}"><formula1>${d.min}</formula1><formula2>${d.max}</formula2></dataValidation>`;
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    `<sheetViews><sheetView workbookViewId="0">${pane}</sheetView></sheetViews>` + (cols ? `<cols>${cols}</cols>` : '') + `<sheetData>${rows}</sheetData>` +
+    (ws.merges.length ? `<mergeCells count="${ws.merges.length}">${ws.merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '') +
+    ws.cf.map(([sq, dxf, f]) => `<conditionalFormatting sqref="${sq}"><cfRule type="expression" dxfId="${dxf}" priority="${++pr}"><formula>${esc(f)}</formula></cfRule></conditionalFormatting>`).join('') +
+    (ws.dv.length ? `<dataValidations count="${ws.dv.length}">${ws.dv.map(dv).join('')}</dataValidations>` : '') +
+    '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape"/></worksheet>';
+}
+const X_BORDER = '<border><left style="thin"><color rgb="FFBBBBBB"/></left><right style="thin"><color rgb="FFBBBBBB"/></right><top style="thin"><color rgb="FFBBBBBB"/></top><bottom style="thin"><color rgb="FFBBBBBB"/></bottom><diagonal/></border>';
+const X_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+  '<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF555555"/><name val="Calibri"/></font></fonts>' +
+  '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+  `<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>${X_BORDER}</borders>` +
+  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="9">' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>' +
+  '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>' +
+  '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+  '<dxfs count="3"><dxf><fill><patternFill patternType="solid"><bgColor rgb="FFFFE699"/></patternFill></fill></dxf>' +
+  '<dxf><fill><patternFill patternType="solid"><bgColor rgb="FFF4B183"/></patternFill></fill></dxf>' +
+  '<dxf><font><strike/><color rgb="FF999999"/></font></dxf></dxfs></styleSheet>';
+function xBook(X, sheets){
+  const ns = 'http://schemas.openxmlformats.org/', head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', ct = 'application/vnd.openxmlformats-officedocument.spreadsheetml.';
+  const files = {
+    '[Content_Types].xml': head + `<Types xmlns="${ns}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="${ct}sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${ct}styles+xml"/>` +
+      sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="${ct}worksheet+xml"/>`).join('') + '</Types>',
+    '_rels/.rels': head + `<Relationships xmlns="${ns}package/2006/relationships"><Relationship Id="rId1" Type="${ns}officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    'xl/workbook.xml': head + `<workbook xmlns="${ns}spreadsheetml/2006/main" xmlns:r="${ns}officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>` +
+      sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('') + '</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>',
+    'xl/_rels/workbook.xml.rels': head + `<Relationships xmlns="${ns}package/2006/relationships">` +
+      sheets.map((_, i) => `<Relationship Id="rId${i+1}" Type="${ns}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('') +
+      `<Relationship Id="rId${sheets.length+1}" Type="${ns}officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml': X_STYLES
+  };
+  sheets.forEach((s, i) => files[`xl/worksheets/sheet${i+1}.xml`] = xSheetXml(s));
+  const z = X.CFB.utils.cfb_new(), enc = new TextEncoder();
+  Object.entries(files).forEach(([n, s]) => X.CFB.utils.cfb_add(z, n, enc.encode(s)));
+  return X.CFB.write(z, {fileType: 'zip', type: 'array', compression: true});
+}
+// colonne di un foglio di sezione: anagrafica, voti dei due giri (G1… poi i capi; coppie con la sincronia), totali, zone, calcoli
+function risLayout(gara, sec){
+  const cop = sec.type !== 'IND', J = [...Array(gara.ng)].map((_, j) => 'G' + (j+1)).concat([...Array(gara.nc)].map((_, c) => 'C' + (c+1)));
+  const inp = []; let c = 6;
+  [0, 1].forEach(g => J.forEach(j => { inp.push({g, j, k: 'v', c: c++}); if (cop) inp.push({g, j, k: 's', c: c++}); }));
+  const L = {cop, J, inp, in1: 6, in2: c - 1, tot: [c, c + 1], T: c + 2}; c += 3;
+  if (gara.spareggio !== 'decimali'){ L.Z = {C: c, I: c + 1, S: c + 2}; L.zf = c + 3; c += 4; }
+  L.manc = c++; L.act = c++; L.h = {};
+  [0, 1].forEach(g => J.forEach(j => L.h[g + j] = c++));   // punteggio di ogni giudice nel giro (voto + sincronia)
+  L.last = c - 1;
+  return L;
+}
+const risLabel = (sec, a) => { const id = circuitCat(sec.type, a.cat); return (RIS_LAB.find(([k]) => k === id) || ['', ''])[1]; };
+const risNome = (sec, a) => sec.type !== 'IND' ? (a.nome || '') : ((campo(a, /^cognome/i) || (a.nome || '').split(' ')[0] || '') + ' ' + (campo(a, /^nome$/i) || (a.nome || '').split(' ').slice(1).join(' '))).trim();
+const risAsd = a => [...new Set([].concat(a.campi || []).map(c => campo({campi: c}, ASD_RE)).filter(Boolean))].join(' / ');
+const risGruppo = sec => { if (sec.type !== 'IND') return ''; const g = /gruppo\s*\d/i.exec(sec.nome), m = /^manche\s*(\d+)/i.exec(sec.nome); return g ? g[0] : m ? (+m[1] <= 2 ? 'Gruppo 1' : 'Gruppo 2') : ''; };
+function riservaFogli(gara){
+  const cas = gara.spareggio !== 'decimali', D = RIS_D, J = [...Array(gara.ng)].map((_, j) => 'G' + (j+1)).concat([...Array(gara.nc)].map((_, c) => 'C' + (c+1)));
+  const GN = 'G' + gara.ng, CN = 'C' + gara.nc;
+  /* ---- sezioni e righe (servono prima, perché i fogli si richiamano a vicenda) ---- */
+  const used = new Set(['Impostazioni', 'Classifica', 'Calcolo']), fogli = [], AT = [];
+  gara.sezioni.forEach(sec => {
+    let nm = (sec.nome || `Sezione ${sec.idx}`).replace(/[\[\]:*?\/\\']/g, '-').slice(0, 31), k = 2;
+    while (used.has(nm)) nm = nm.slice(0, 28) + ' ' + k++;
+    used.add(nm);
+    const f = {sec, L: risLayout(gara, sec), ws: xSheet(nm)}; fogli.push(f);
+    sec.atl.forEach((a, i) => AT.push(Object.assign({a, r: D + i, id: circuitCat(sec.type, a.cat)}, f)));
+  });
+  if (!AT.length) throw new Error('nessun pettorale nelle sezioni: assegna prima i pettorali');
+  /* ---- colonne del foglio Calcolo ---- */
+  const CL = {J: {}, G: [], C: [], V: []}; let cc = 0;
+  ['sez', 'p', 'nome', 'asd', 'cat', 'act', 'tot', 'id', 'manc', 'zc'].forEach(k => CL[k] = cc++);
+  J.forEach(j => CL.J[j] = cc++); CL.capo = cc++; CL.min = cc++;
+  if (cas){ CL.zC = cc++; CL.zI = cc++; CL.zS = cc++; }
+  const S = cas ? RIS_PASSI : gara.decimali.length;
+  for (let s = 0; s < S; s++){ CL.G[s] = cc++; if (cas) CL.C[s] = cc++; CL.V[s] = cc++; }
+  CL.G[S] = cc++; if (cas) CL.C[S] = cc++;
+  ['rank', 'ord', 'key', 'size', 'zf', 'nota'].forEach(k => CL[k] = cc++);
+  const N = AT.length, rg = c => xRng(c, 1, N), CQ = xQ('Calcolo');
+  /* ---- Impostazioni ---- */
+  const imp = xSheet('Impostazioni'); imp.cols = {0: 36, 1: 110};
+  let ir = 0; const put = (a, b, s) => { xSet(imp, ir, 0, a, 8); if (b !== undefined) xSet(imp, ir, 1, b, s); ir++; };
+  xSet(imp, ir++, 0, 'Foglio di riserva · NWS Giuria', 2);
+  xSet(imp, ir++, 0, 'Da usare solo se l\'app non funziona. Le impostazioni vengono dall\'app.', 7); ir++;
+  put('Tappa', gara.tappa || ''); put('Codice gara', gara.code || ''); put('Data', gara.data || '');
+  put('Tipo di gara', gara.tipo === 'fuori' ? 'fuori classifica' : 'tappa di circuito');
+  put('Versione dell\'app', 'v' + VERSION); put('Generato il', new Date().toLocaleString('it-IT')); ir++;
+  put('Scheda dei giudici di campo', gara.varCampo === 'B' ? 'B · zone' : 'A · elementi');
+  put('Giudici di campo', gara.ng); (gara.postazioni || []).forEach((p, i) => put('', `G${i+1} · ${p.label}`));
+  put('Giudici capo', gara.nc); put('Giri', 2);
+  const scR = ir; put('Scarto del voto più alto e più basso', gara.scarto ? 'sì' : 'no', 3);
+  imp.dv.push({sq: xRef(1, scR), list: 'sì,no'});
+  put('', gara.ng >= 3 ? 'sì: in ogni giro si tolgono il voto più alto e il più basso dei giudici di campo (il capo conta sempre). Cambialo solo se lo decide la giuria.'
+    : 'con meno di 3 giudici di campo non si scarta', 7);
+  put('Totale', 'somma dei voti di tutti i giudici, capo compreso, nei due giri');
+  if (cas){
+    put('Pari merito', 'spareggio a cascata, in quest\'ordine:');
+    ['1) votazione dei giudici: ogni giudice, capo compreso, dà un punto a chi ha votato di più (mezzo se uguale)', '2) voto del capo',
+     '3) zona centrale, 4) zona inferiore, 5) zona superiore (somma dei giudici di campo nei due giri)', '6) voto minimo più alto tra i giudici di campo',
+     'poi ex aequo. Quando un criterio divide il gruppo, chi resta pari riparte dal criterio 1.'].forEach(t => put('', t));
+  } else {
+    put('Pari merito', 'Totale, poi in quest\'ordine:');
+    gara.decimali.forEach((d, i) => put('', `${i+1}) ${d.j === 'C1' ? 'giudice capo' : d.j} · ${(DEC_GIRO.find(([k]) => k === d.g) || ['', 'totale'])[1]}`));
+  }
+  ir++; put('Sezioni', '');
+  fogli.forEach(({sec, ws}) => put('', `${ws.name} · ${sec.type === 'IND' ? 'individuale' : 'coppie'} · pettorali ${ranges(sec.atl.map(a => a.p)).join(', ')} · ${sec.atl.length} righe`));
+  ir++; put('Categorie', '');
+  Object.keys(CAT_NOMI).forEach(id => { const n = AT.filter(t => t.id === id).length; if (n) put('', `${CAT_NOMI[id]}: ${n}` + (id ? '' : ' (riserve)')); });
+  ir++; put('Valori ammessi', '');
+  put('', 'giudice di campo: da 0 a 10 per giro (somma delle zone; AE = 0)'); put('', 'giudice capo: da 0 a 20 per giro');
+  if (fogli.some(f => f.L.cop)) put('', 'sincronia delle coppie: da 1 a 5 (0 solo con AE)');
+  ir++; put('Come si usa', '');
+  ['1. In ogni foglio di sezione batti i voti di ogni giudice, giro per giro.', '2. Assente: scrivi X nella colonna Assente.',
+   '3. Giallo = voto mancante.' + (cas ? ' Arancio = conta le zone dalle schede dei giudici di campo e scrivi le somme.' : ''),
+   '4. La classifica si aggiorna da sola nel foglio Classifica.'].forEach(t => put('', t));
+  const scarto = xQ('Impostazioni') + xRef(1, scR, true);
+  /* ---- fogli delle sezioni ---- */
+  const NOMI_IND = RIS_LAB.slice(0, 4).map(x => x[1]).join(','), NOMI_COP = RIS_LAB.slice(4).map(x => x[1]).join(',');
+  fogli.forEach(({sec, L, ws}) => {
+    const r1 = D, r2 = D + Math.max(1, sec.atl.length) - 1, sq = (a, b) => `${xRef(a, r1)}:${xRef(b === undefined ? a : b, r2)}`, half = L.inp.length / 2;
+    xSet(ws, 0, 0, `${ws.name} · ${gara.tappa || ''} ${gara.data || ''}`.trim(), 2);
+    const group = (c1, c2, t) => { for (let c = c1; c <= c2; c++) xSet(ws, 1, c, c === c1 ? t : '', 1); if (c2 > c1) ws.merges.push(`${xRef(c1, 1)}:${xRef(c2, 1)}`); };
+    group(L.in1, L.in1 + half - 1, '1° giro'); group(L.in1 + half, L.in2, '2° giro'); group(L.tot[0], L.T, 'Risultato');
+    if (L.Z) group(L.Z.C, L.zf, 'Zone per lo spareggio');
+    group(L.h['0' + J[0]], L.last, 'Punteggio di ogni giudice (calcolato)');
+    const lab = j => j[0] === 'C' && gara.nc === 1 ? 'Capo' : j;
+    [['Pett.', 7], [L.cop ? 'Coppia' : 'Cognome Nome', L.cop ? 40 : 28], ['ASD', 24], ['Categoria', 17], ['Gruppo', 10], ['Assente', 8]].forEach(([t, w], c) => { xSet(ws, 2, c, t, 1); ws.cols[c] = w; });
+    L.inp.forEach(x => { xSet(ws, 2, x.c, lab(x.j) + (x.k === 's' ? ' sinc.' : ''), 1); ws.cols[x.c] = x.k === 's' ? 7 : 6; });
+    [[L.tot[0], 'Tot. 1° giro'], [L.tot[1], 'Tot. 2° giro'], [L.T, 'Totale'], [L.manc, 'Voti mancanti'], [L.act, 'In classifica']].forEach(([c, t]) => { xSet(ws, 2, c, t, 1); ws.cols[c] = 9; });
+    if (L.Z) [[L.Z.C, 'Centrale'], [L.Z.I, 'Inferiore'], [L.Z.S, 'Superiore'], [L.zf, 'Servono?']].forEach(([c, t]) => { xSet(ws, 2, c, t, 1); ws.cols[c] = 9; });
+    [0, 1].forEach(g => J.forEach(j => { xSet(ws, 2, L.h[g + j], `${lab(j)} ${g+1}°`, 1); ws.cols[L.h[g + j]] = 6; }));
+    sec.atl.forEach((a, i) => {
+      const r = D + i, R = c => xRef(c, r), act = `$${colL(L.act)}${r+1}`, inR = `${R(L.in1)}:${R(L.in2)}`, cr = i => xRef(CL[i], AT.findIndex(t => t.a === a && t.sec === sec) + 1, true);
+      xSet(ws, r, 0, a.p, 6); xSet(ws, r, 1, risNome(sec, a), 6); xSet(ws, r, 2, risAsd(a), 6); xSet(ws, r, 3, risLabel(sec, a), 6); xSet(ws, r, 4, risGruppo(sec), 6); xSet(ws, r, 5, '', 3);
+      L.inp.forEach(x => xSet(ws, r, x.c, '', 3));
+      [0, 1].forEach(g => J.forEach(j => xSet(ws, r, L.h[g + j], xF(`IF(${act}=1,${L.inp.filter(x => x.g === g && x.j === j).map(x => `N(${R(x.c)})`).join('+')},"")`), 4)));
+      [0, 1].forEach(g => { const all = `${R(L.h[g + J[0]])}:${R(L.h[g + CN])}`, gg = `${R(L.h[g + 'G1'])}:${R(L.h[g + GN])}`;
+        xSet(ws, r, L.tot[g], xF(`IF(${act}=1,SUM(${all})` + (gara.ng >= 3 ? `-IF(${scarto}="sì",MAX(${gg})+MIN(${gg}),0)` : '') + ',"")'), 4); });
+      xSet(ws, r, L.T, xF(`IF(${act}=1,${R(L.tot[0])}+${R(L.tot[1])},"")`), 5);
+      if (L.Z){ ['C', 'I', 'S'].forEach(z => xSet(ws, r, L.Z[z], '', 3)); xSet(ws, r, L.zf, xF(`IF(${CQ}${cr('zf')}=1,"sì","")`), 4); }
+      xSet(ws, r, L.manc, xF(`IF(${act}=1,COUNTBLANK(${inR}),"")`), 4);
+      xSet(ws, r, L.act, xF(`IF(AND($F${r+1}="",OR($B${r+1}<>"",COUNT(${inR})>0)),1,0)`), 4);
+    });
+    const voti = f => L.inp.filter(f).map(x => sq(x.c)).join(' ');
+    ws.dv.push({sq: sq(5), list: 'X', msg: 'Scrivi X se è assente'}, {sq: sq(3), list: L.cop ? NOMI_COP : NOMI_IND});
+    ws.dv.push({sq: voti(x => x.k === 'v' && x.j[0] === 'G'), min: 0, max: 10, msg: 'Giudice di campo: da 0 a 10 (AE = 0)'});
+    ws.dv.push({sq: voti(x => x.k === 'v' && x.j[0] === 'C'), min: 0, max: 20, msg: 'Giudice capo: da 0 a 20'});
+    if (L.cop) ws.dv.push({sq: voti(x => x.k === 's'), min: 0, max: 5, msg: 'Sincronia: da 1 a 5 (0 solo con AE)'});
+    if (L.Z) [['C', 10, 'centrale'], ['I', 6, 'inferiore'], ['S', 4, 'superiore']].forEach(([z, m, t]) =>
+      ws.dv.push({sq: sq(L.Z[z]), min: 0, max: m * gara.ng, msg: `Zona ${t}: somma dei giudici di campo nei due giri (da 0 a ${m * gara.ng})`}));
+    ws.cf.push([sq(0, L.last), 2, `$F${r1+1}<>""`]);
+    ws.cf.push([sq(L.in1, L.in2), 0, `AND($${colL(L.act)}${r1+1}=1,${xRef(L.in1, r1)}="")`]);
+    if (L.Z) ws.cf.push([sq(L.Z.C, L.Z.S), 1, `$${colL(L.zf)}${r1+1}="sì"`]);
+    ws.freeze = [2, D];
+  });
+  /* ---- Calcolo: una riga per pettorale, con i criteri dello spareggio ---- */
+  const cal = xSheet('Calcolo'); cal.freeze = [0, 1];
+  const catF = x => RIS_LAB.reduceRight((acc, [id, lab]) => `IF(${x}="${lab}","${CAT_NOMI[id]}",${acc})`, `"${CAT_NOMI['']}"`);
+  const hd = {sez: 'Foglio', p: 'Pett.', nome: 'Nome', asd: 'ASD', cat: 'Categoria', act: 'In classifica', tot: 'Totale', id: 'N.', manc: 'Voti mancanti', zc: 'Zone scritte',
+    capo: 'Capo', min: 'Voto minimo', zC: 'Zona C', zI: 'Zona I', zS: 'Zona S', rank: 'Posizione', ord: 'Ordine', key: 'Chiave', size: 'Pari', zf: 'Zone servono', nota: 'Nota'};
+  Object.entries(hd).forEach(([k, t]) => { if (CL[k] !== undefined) xSet(cal, 0, CL[k], t, 1); });
+  J.forEach(j => xSet(cal, 0, CL.J[j], j + ' (2 giri)', 1));
+  CL.G.forEach((c, s) => { xSet(cal, 0, c, `Gruppo ${s+1}`, 1); if (cas) xSet(cal, 0, CL.C[s], `Crit. ${s+1}`, 1); if (s < S) xSet(cal, 0, CL.V[s], `Valore ${s+1}`, 1); });
+  cal.cols = {[CL.nome]: 28, [CL.asd]: 20, [CL.cat]: 18, [CL.nota]: 22};
+  AT.forEach((t, i) => {
+    const r = i + 1, R = c => xRef(c, r), SQ = xQ(t.ws.name), SR = c => SQ + xRef(c, t.r, true), act = R(CL.act), L = t.L;
+    const set = (k, f) => xSet(cal, r, typeof k === 'number' ? k : CL[k], typeof f === 'string' ? xF(f) : f);
+    xSet(cal, r, CL.sez, t.ws.name); set('p', SR(0)); set('nome', `${SR(1)}&""`); set('asd', `${SR(2)}&""`); set('cat', catF(SR(3)));
+    set('act', SR(L.act)); set('tot', `IF(${act}=1,${SR(L.T)},"")`); set('id', i + 1); set('manc', `N(${SR(L.manc)})`);
+    set('zc', L.Z ? `COUNT(${SR(L.Z.C)}:${xRef(L.Z.S, t.r, true)})` : 0);
+    J.forEach(j => set(CL.J[j], `N(${SR(L.h['0' + j])})+N(${SR(L.h['1' + j])})`));
+    set('capo', `SUM(${R(CL.J.C1)}:${R(CL.J[CN])})`); set('min', `MIN(${R(CL.J.G1)}:${R(CL.J[GN])})`);
+    if (cas) [['zC', 'C'], ['zI', 'I'], ['zS', 'S']].forEach(([k, z]) => set(k, `N(${SR(L.Z[z])})`));
+    set(CL.G[0], `IF(${act}=1,${R(CL.cat)}&"|"&${R(CL.tot)},"")`);
+    if (cas) set(CL.C[0], `IF(${R(CL.G[0])}="","",0)`);
+    for (let s = 0; s < S; s++){
+      const G = R(CL.G[s]), V = R(CL.V[s]), C = cas ? R(CL.C[s]) : '';
+      if (cas){
+        const gir = J.map(j => { const a = rg(CL.J[j]), b = R(CL.J[j]); return `SUMPRODUCT((${rg(CL.G[s])}=${G})*((${a}<${b})*2+(${a}=${b})))`; }).join('+') + `-${J.length}`;
+        set(CL.V[s], `IF(${G}="","",IF(${C}=0,${gir},CHOOSE(${C},${R(CL.capo)},${R(CL.zC)},${R(CL.zI)},${R(CL.zS)},${R(CL.min)},0)))`);
+        set(CL.C[s + 1], `IF(${G}="","",IF(SUMPRODUCT((${rg(CL.G[s])}=${G})*(${rg(CL.V[s])}<>${V}))>0,0,MIN(${C}+1,6)))`);
+      } else {
+        const d = gara.decimali[s], h = g => J.includes(d.j) ? `N(${SR(L.h[g + d.j])})` : '0';
+        set(CL.V[s], `IF(${G}="","",MIN(99,${d.g === '1' ? h(0) : d.g === '2' ? h(1) : h(0) + '+' + h(1)}))`);
+      }
+      set(CL.G[s + 1], `IF(${G}="","",${G}&"|"&${V})`);
+    }
+    const GF = R(CL.G[S]);
+    set('rank', `IF(${act}=1,1+SUMPRODUCT((${rg(CL.cat)}=${R(CL.cat)})*(${rg(CL.act)}=1)*(${rg(CL.tot)}>${R(CL.tot)}))` +
+      CL.V.map((c, s) => `+SUMPRODUCT((${rg(CL.G[s])}=${R(CL.G[s])})*(${rg(c)}>${R(c)}))`).join('') + ',"")');
+    set('ord', `IF(${act}=1,${R(CL.rank)}+SUMPRODUCT((${rg(CL.G[S])}=${GF})*(${rg(CL.id)}<${R(CL.id)})),"")`);
+    set('key', `IF(${act}=1,${R(CL.cat)}&"|"&${R(CL.ord)},"")`);
+    set('size', `IF(${act}=1,SUMPRODUCT((${rg(CL.G[S])}=${GF})*1),0)`);
+    set('zf', cas ? `IF(${act}=1,IF(OR(${CL.C.slice(0, S).map((c, s) => `AND(${R(c)}>=2,${R(c)}<=4,SUMPRODUCT((${rg(CL.G[s])}=${R(CL.G[s])})*1)>1)`).join(',')}),1,0),0)` : 0);
+    set('nota', `IF(${act}=1,IF(AND(${R(CL.zf)}=1,${R(CL.zc)}<3),"inserire le zone",IF(${R(CL.size)}>1,` +
+      (cas ? `IF(${R(CL.C[S])}<6,"spareggio non concluso","ex aequo")` : '"ex aequo"') + ',"")),"")');
+  });
+  /* ---- Classifica: un blocco per categoria ---- */
+  const cl = xSheet('Classifica'); cl.cols = {0: 6, 1: 7, 2: 40, 3: 32, 4: 9, 5: 22};
+  xSet(cl, 0, 0, `Classifica · ${gara.tappa || ''} ${gara.data || ''}`.trim(), 2);
+  xSet(cl, 1, 0, 'Voti mancanti', 8); xSet(cl, 1, 2, xF(`SUM(${CQ}${rg(CL.manc)})`), 8);
+  if (cas){ xSet(cl, 2, 0, 'Righe con le zone da scrivere', 8); xSet(cl, 2, 2, xF(`SUMPRODUCT((${CQ}${rg(CL.zf)}=1)*(${CQ}${rg(CL.zc)}<3))`), 8); }
+  xSet(cl, 3, 0, 'Si aggiorna da sola. Gli assenti non compaiono. Stessa posizione = ex aequo.', 7);
+  let r = 5;
+  Object.keys(CAT_NOMI).forEach(id => {
+    const tipo = t => t.sec.type === 'IND' ? 'IND' : 'COP', known = AT.filter(t => t.id === id);
+    const n = id ? (known.length ? known.length + AT.filter(t => !t.id && tipo(t) === tipo(known[0])).length : 0) : known.length;
+    if (!n) return;
+    xSet(cl, r++, 0, CAT_NOMI[id], 8);
+    ['Pos.', 'Pett.', id && known[0].sec.type !== 'IND' ? 'Coppia' : 'Atleta', 'ASD', 'Totale', 'Note'].forEach((t, c) => xSet(cl, r, c, t, 1)); r++;
+    for (let k = 1; k <= n; k++, r++){
+      const m = `MATCH("${CAT_NOMI[id]}|${k}",${CQ}${rg(CL.key)},0)`;
+      ['rank', 'p', 'nome', 'asd', 'tot', 'nota'].forEach((col, c) => xSet(cl, r, c, xF(`IFERROR(INDEX(${CQ}${rg(CL[col])},${m}),"")`), c === 4 ? 5 : 6));
+    }
+    r++;
+  });
+  return {sheets: [imp].concat(fogli.map(f => f.ws), [cl, cal]), fogli, AT, CL};
+}
+const riservaXlsx = (X, gara) => xBook(X, riservaFogli(gara).sheets);
+$('b-riserva').onclick = async () => {
+  try {
+    const gara = readGara();
+    if (gara.squadre) throw new Error('il foglio di riserva non è disponibile per le gare a squadre');
+    const X = await loadXLSX(), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([riservaXlsx(X, gara)], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download = `riserva_${gara.code || 'gara'}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    $('assign-info').textContent = '✓ Foglio di riserva scaricato. Tienilo sul PC: si usa con Excel o Google Fogli anche senza internet.';
   } catch(e){ $('assign-info').textContent = '⚠ ' + e.message; }
 };
 
@@ -1539,7 +1818,7 @@ function imgToCanvas(img, maxSide){
 }
 
 /* trova i 4 quadrati neri: restituisce 4 centri in ordine orario (in coordinate dell'immagine) */
-function findFiducials(cv, canvas){
+function findFiducials(cv, canvas, all){
   const src = cv.imread(canvas), gray = new cv.Mat(), bin = new cv.Mat();
   cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
   cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
@@ -1568,8 +1847,8 @@ function findFiducials(cv, canvas){
   if (cand.length < 4) return null;
   // i quadrati di riferimento sono i più grandi: prova le combinazioni dei candidati maggiori
   cand.sort((p, q) => q.a - p.a);
-  const top = cand.slice(0, 14);
-  let best = null;
+  const top = cand.slice(0, 30);   // non solo i più grandi: le cifre scritte nei quadratini dei totali sono macchie scure quasi quadrate
+  const found = [];
   for (let i = 0; i < top.length; i++) for (let j = i+1; j < top.length; j++) for (let k = j+1; k < top.length; k++) for (let l = k+1; l < top.length; l++){
     const q = orderCW([top[i], top[j], top[k], top[l]]);
     const as = q.map(p => p.a); if (Math.max(...as) / Math.min(...as) > 5) continue;   // con prospettiva forte l'angolo vicino è ~4 volte quello lontano
@@ -1587,9 +1866,11 @@ function findFiducials(cv, canvas){
     // Si preferiscono 4 quadrati di dimensioni simili e con le proporzioni del foglio (283 × 196 mm tra i centri)
     const spread = Math.max(...as) / Math.min(...as);
     const score = area / (1 + 3*Math.abs(Math.log(ratio / (283/196)))) / Math.sqrt(spread);
-    if (!best || score > best.score) best = {q, score};
+    found.push({q, score});
   }
-  return best ? best.q : null;
+  // all: le 5 combinazioni migliori, da confermare con il QR o con il confronto con il modulo vuoto
+  found.sort((a, b) => b.score - a.score);
+  return all ? found.slice(0, 5).map(f => f.q) : found.length ? found[0].q : null;
 }
 /* il contorno si semplifica in 4 vertici, il quadrilatero ne copre l'area (cerchio ~0.64) e i lati non sono troppo diversi */
 function isQuad(cv, c, a){
@@ -1824,12 +2105,12 @@ function smoothOffsets(raw){
 async function readSheet(img, manual){
   const cv = await loadOpenCV();
   const full = imgToCanvas(img, 3000), det = imgToCanvas(img, 1400);
-  const quad = findFiducials(cv, det);
-  if (!quad) throw new Error('Non trovo i 4 quadrati neri agli angoli: rifai la foto con il foglio intero e ben illuminato.');
-  const kk = full.width / det.width;
-  const qf = quad.map(p => ({x: p.x*kk, y: p.y*kk}));
-  // orientamento: prova le 4 rotazioni finché il QR si legge nella posizione attesa
-  const srcM = cv.imread(full); let qr = null, pts = null;
+  const quads = findFiducials(cv, det, true);
+  if (!quads.length) throw new Error('Non trovo i 4 quadrati neri agli angoli: rifai la foto con il foglio intero e ben illuminato.');
+  const kk = full.width / det.width, QF = quads.map(q => q.map(p => ({x: p.x*kk, y: p.y*kk})));
+  // orientamento: prova le 4 rotazioni finché il QR si legge nella posizione attesa (solo con gli angoli migliori:
+  // il QR si legge anche con angoli sbagliati, quindi non basta a confermarli)
+  const srcM = cv.imread(full), qf = QF[0]; let qr = null, pts = null;
   ({qr, pts} = findQR(cv, srcM, qf));
   srcM.delete();
   let warp = pts ? warpSheet(cv, full, pts) : null, w0 = null;
@@ -1839,7 +2120,7 @@ async function readSheet(img, manual){
   const pl = parsePayload(qr);
   if (pl && pl.old) throw new Error('Scheda stampata con una versione precedente: ristampala.');
   if (!pl){
-    if (isManual) throw new Error(`Codice "${qr}" non valido: copialo per intero, es. NWS2.MES26.1IND.G1.F1.1.25.X`);
+    if (isManual) throw new Error(`Codice "${qr}" non valido: copialo per intero, es. NWS3.MES27.1IND.G1.F1.1.25.X`);
     if (qr) throw new Error(`QR non riconosciuto: ${qr}`);
     const e = new Error('QR non leggibile: scrivi il codice stampato in basso a destra della scheda.'); e.needCode = true; throw e;
   }
@@ -1859,7 +2140,8 @@ async function readSheet(img, manual){
   // QR letto solo sulla foto intera, o codice a mano: il verso del foglio lo dà il confronto con il modulo vuoto
   let orient = null;
   if (!warp){
-    orient = orientByTemplate(cv, full, qf, tpl, w0);
+    // il confronto con il modulo vuoto conferma gli angoli: se non torna, le altre combinazioni (una cifra scritta a pennarello può sembrare un quadrato nero)
+    for (const q of QF){ orient = orientByTemplate(cv, full, q, tpl, q === qf ? w0 : null); if (orient.ok) break; }
     if (!orient.ok) throw new Error('Non riesco a capire il verso del foglio: rifai la foto più vicina e dritta.');
     warp = orient.warp;
   }
@@ -2005,8 +2287,8 @@ $('file').onchange = async e => {
 };
 function renderPending(){
   $('needcode').innerHTML = PENDING.map((p, i) => `<div class="card" style="margin:12px 0 0;padding:12px;border:1px solid var(--warn)">
-    <b>${esc(p.name)}</b>: QR non leggibile.<p class="hint">Scrivi il codice stampato in basso a destra della scheda, dopo «Codice» (es. NWS2.MES26.1IND.G1.F1.1.25.X).</p>
-    <div class="row" style="margin-top:8px;gap:8px"><input data-i="${i}" placeholder="NWS2.…" autocapitalize="characters" autocomplete="off" spellcheck="false" style="flex:1;font-family:ui-monospace,monospace">
+    <b>${esc(p.name)}</b>: QR non leggibile.<p class="hint">Scrivi il codice stampato in basso a destra della scheda, dopo «Codice» (es. NWS3.MES27.1IND.G1.F1.1.25.X).</p>
+    <div class="row" style="margin-top:8px;gap:8px"><input data-i="${i}" placeholder="NWS3.…" autocapitalize="characters" autocomplete="off" spellcheck="false" style="flex:1;font-family:ui-monospace,monospace">
     <button class="btn" data-go="${i}">Leggi</button><button class="btn sec" data-drop="${i}">Scarta</button></div>
     <p class="hint" data-msg="${i}"></p></div>`).join('');
   document.querySelectorAll('#needcode [data-go]').forEach(b => b.onclick = async () => {
@@ -2334,7 +2616,7 @@ async function simulateSheet(sh, seed){
   const ink = () => rnd() < .5 ? 'rgba(20,25,60,.92)' : 'rgba(15,15,15,.9)';
   const fill = b => { if (!b) return; ctx.fillStyle = ink(); ctx.beginPath(); const rr = b.r * (.8 + rnd()*.2);
     if (b.sq) ctx.rect((b.cx-rr)*K, (b.cy-rr)*K, rr*2*K, rr*2*K); else ctx.ellipse(b.cx*K, b.cy*K, rr*K, rr*K*.95, rnd()*3, 0, Math.PI*2); ctx.fill(); };
-  const digits = (r, g, val) => L.boxes.filter(b => b.row === r && b.giro === g && b.key[0] === 'D').forEach((b, i) => {
+  const digits = (r, g, val) => L.boxes.filter(b => b.row === r && b.giro === g && /^[DTF]/.test(b.key)).forEach((b, i) => {   // g = 2: totale della riga
     ctx.fillStyle = ink(); ctx.font = `${b.h*.85*K}px sans-serif`; ctx.textAlign = 'center';
     ctx.fillText(String(val).padStart(2, '0')[i], (b.x + b.w/2)*K, (b.y + b.h*.85)*K); });
   const cop = sh.type !== 'IND';
@@ -2342,6 +2624,7 @@ async function simulateSheet(sh, seed){
     const B = L.bubbles.filter(b => b.row === r), skill = .35 + .6*hash01('abilita' + row.p);   // stesso atleta, voti simili tra giudici
     if (hash01('assente' + row.p) < .04){ fill(B.find(b => b.key === 'ASS')); ctx.strokeStyle = ink(); ctx.lineWidth = 5; ctx.beginPath();
       const y = (G.RY + r*G.RH + G.RH/2)*K; ctx.moveTo(40, y); ctx.lineTo(G.W*K - 70, y); ctx.stroke(); return; }
+    let riga = 0;
     for (let g = 0; g < 2; g++){
       const bg = B.filter(b => b.giro === g), q = Math.min(1, Math.max(0, skill + (rnd() - .5)*.25)); let score = 0;
       const sync = () => { const y = Math.min(5, Math.max(1, Math.round(1 + q*4))); fill(bg.find(b => b.key === 'Y' + y)); return y; };
@@ -2349,8 +2632,9 @@ async function simulateSheet(sh, seed){
       else if (rnd() < .03){ fill(bg.find(b => b.key === 'AE')); }
       else if (sh.variant === 'B'){ ZB.forEach(([z, n]) => { const vz = Math.min(n, Math.max(0, Math.round(q*n))); fill(bg.find(b => b.key === 'Z' + z + vz)); score += vz; }); if (cop) score += sync(); }
       else { bg.filter(b => /^[SCI]\d$/.test(b.key)).forEach(b => { if (rnd() < q){ fill(b); score++; } }); if (cop) score += sync(); }
-      digits(r, g, score);
+      digits(r, g, score); riga += score;
     }
+    digits(r, 2, riga);
   });
   // "foto": foglio leggermente ruotato su un tavolo
   const ph = document.createElement('canvas'); ph.width = 3400; ph.height = 2500;
@@ -2387,7 +2671,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 if (false)   /* demo: niente cache offline */ navigator.serviceWorker.register('sw.js').catch(() => {});
 
-window.NWS = {abbrev, layout, sheetSVG, buildSheets, teamSort, assignTeams, postAuto, postCheck, postLabel, POST_MODELLI, computeClassifica, parseSezioni, readSheet, parsePayload, makePayload, G, S, evaluate, ZB};
+window.NWS = {riservaFogli, riservaXlsx, abbrev, layout, sheetSVG, buildSheets, teamSort, assignTeams, postAuto, postCheck, postLabel, POST_MODELLI, computeClassifica, parseSezioni, readSheet, parsePayload, makePayload, G, S, evaluate, ZB};
 </script>
 </body>
 </html>
