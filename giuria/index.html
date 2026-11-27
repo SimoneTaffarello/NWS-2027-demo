@@ -311,7 +311,7 @@ try { if (sessionStorage.getItem('nws2027demo_pin') === '1') document.getElement
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 'use strict';
-const VERSION = '0.11.0';
+const VERSION = '0.11.3';
 document.getElementById('ver').textContent = VERSION;
 { const hv = document.createElement('span'); hv.className = 'hsub'; hv.style.marginLeft = 'auto'; hv.textContent = 'v' + VERSION; const hd = document.querySelector('header'); if (hd) hd.appendChild(hv); }
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js';
@@ -330,12 +330,12 @@ const ZB = [['S', 2, 'piede-bacino-spalle · sguardo avanti'],
   ['C', 5, 'ampiezza braccia · braccio morbido · mano chiusa in spinta · mano aperta dietro · bastoncino inclinato'],
   ['I', 3, 'tallone → avampiede · piede-bastone insieme · bastone tra i piedi']];
 const ZBN = {S:'SUPERIORE', C:'CENTRALE', I:'INFERIORE', K:'SINCRONIA'};
-const NUM_COL = '#4a4a4a';      // colore dei numeri stampati dentro i cerchi
+const NUM_COL = '#333';         // colore dei numeri stampati dentro i cerchi
 // schede versione 3 (QR NWS3): intestazione più bassa, righe più alte, totale scritto a mano per ogni giro e per la riga
-const G = {W:297,H:210,FID:6,FIDP:[[4,4],[287,4],[4,200],[287,200]],TX:4,TW:289,TY:18.5,H1:4.4,H2:3.2,H3:11,RH:6.4,NR:25,
+const G = {W:297,H:210,FID:6,FIDP:[[4,4],[287,4],[4,200],[287,200]],TX:4,TW:289,TY:18.5,H1:4.4,H2:3.2,H3:8,RH:6.5,NR:25,
            FIX:[10,6,6.5],QR:{x:265,y:3.4,s:14},R:2.4,DB:5.2,DG:.6,DM:.7};
 G.TB = 2*G.DB + G.DG + 2*G.DM;                   // riquadro di un totale: due quadratini per le cifre
-G.RY = G.TY + G.H1 + G.H2 + G.H3;                // 37.1 (righe fino a 197.1)
+G.RY = G.TY + G.H1 + G.H2 + G.H3;                // 34.1 (righe fino a 196.6)
 G.PB = G.FIX[0] + G.FIX[1];                      // colonna pettorali, ripetuta prima del 2° giro
 G.GW = (G.TW - G.FIX.reduce((a,b)=>a+b,0) - G.PB - G.TB) / 2;   // larghezza di un giro, compreso il suo totale
 G.UW = G.GW - G.TB;                              // larghezza dei cerchi di un giro
@@ -360,7 +360,7 @@ function layout(sh){
     const x0 = giroX(g);
     let units;
     if (sh.kind === 'campo' && sh.variant === 'B'){
-      units = [{k:'AE',u:1,t:'b'}];
+      units = [{k:'AE',u:1.5,t:'b'}];   // AE più larga: sotto c'è scritto "Andatura errata = 0"
       ZB.forEach(([z, n]) => { for (let v = 0; v <= n; v++) units.push({k:'Z'+z+v,u:1,t:'b',z,val:v}); });
       if (coppie) SYNC.forEach(n => units.push({k:'Y'+n,u:1,t:'b',z:'K',val:n}));
       const cw = G.UW / units.reduce((a,b)=>a+b.u,0);
@@ -464,14 +464,14 @@ function sheetSVG(sh){
   // totale della riga: in fondo a destra
   const rng = (a, b) => `${String(a).padStart(2, '0')}–${b}`, tmax = campo ? (coppie ? 15 : 10) : (coppie ? 25 : 20);
   o.push(`<rect x="${G.FX}" y="${G.TY}" width="${G.TB}" height="${G.RY-G.TY}" fill="#fff" stroke="#111" stroke-width=".35"/>`);
-  [['TOTALE', 2.3, 800, 5.2], ['1° + 2°', 2.1, 600, 8.8], ['giro', 2.1, 600, 11.6], [rng(0, 2*tmax), 1.9, 400, 16.2]].forEach(([t, fs, fw, dy]) =>
+  [['TOTALE', 2.3, 800, 4.4], ['1° + 2°', 2.1, 600, 7.8], ['giro', 2.1, 600, 10.6], [rng(0, 2*tmax), 1.9, 400, 14]].forEach(([t, fs, fw, dy]) =>
     o.push(txt(G.FX + G.TB/2, G.TY + dy, t, {fs, fw, a:'middle', fill: fw < 500 ? '#555' : '#111'})));
   // intestazioni giri
   for (let g = 0; g < 2; g++){
     const x0 = giroX(g), U = L.cols[g], tbx = x0 + G.UW;
     o.push(`<rect x="${x0}" y="${G.TY}" width="${G.GW}" height="${G.H1}" fill="#fff" stroke="#111" stroke-width=".35"/>`);
     const gt = campo ? `${g+1}° GIRO · POSTAZIONE ${g ? sh.post2 : sh.post1}` : `${g+1}° GIRO`;
-    const gs = campo ? ` · Prova: ${g ? sh.prova2 : sh.prova1}` : ' · Gesto tecnico complessivo nella tecnica alternata';
+    const gs = campo ? ` · Prova: ${g ? sh.prova2 : sh.prova1}` : '';
     // testo lungo (mix con più andature): prima le abbreviazioni standard, poi, se serve ancora, carattere più piccolo
     const fit = t => Math.min(1, (G.GW - 3) / (gt.length * 2.8 * .62 + t.length * 2.4 * .54));
     let gs2 = gs; if (fit(gs) < 1 && campo) gs2 = ' · Prova: ' + abbrev(g ? sh.prova2 : sh.prova1);
@@ -486,46 +486,42 @@ function sheetSVG(sh){
     });
     spans.push({z: 'TOT', x: tbx, w: G.TB});
     spans.forEach(s => {
-      const [lab, col] = s.z === 'AE' ? ['AE','#c0392b'] : s.z === 'V' ? ['ARMONIA, FLUIDITÀ E DINAMICITÀ · 0–20','#b8860b'] : s.z === 'TOT' ? ['TOTALE','#6b6b6b'] :
-                         [s.z === 'K' && !campo ? 'SINCR. 1–5' : sh.variant === 'B' ? ZBN[s.z] : ZONE[s.z][0], ZONE[s.z][1]];
+      const [lab, col] = s.z === 'AE' ? ['AE','#c0392b'] : s.z === 'V' ? ['GESTO TECNICO 0–20','#b8860b'] : s.z === 'TOT' ? ['TOTALE','#6b6b6b'] :
+                         [s.z === 'K' && (!campo || sh.variant === 'B') ? 'SINCRONIA 1–5' : sh.variant === 'B' ? ZBN[s.z] : ZONE[s.z][0], ZONE[s.z][1]];
       o.push(`<rect x="${s.x}" y="${zy}" width="${s.w}" height="${G.H2}" fill="${col}" stroke="#fff" stroke-width=".15"/>`);
       o.push(txt(s.x+s.w/2, zy+2.4, lab, {fs:fitFs(lab, s.w - .8, 2, .66), fw:700, fill:'#fff', a:'middle', ls:.1}));
     });
     // etichette colonne
     const ly = zy + G.H2, lb = G.RY - .9, box = (x, w) => o.push(`<rect x="${x}" y="${ly}" width="${w}" height="${G.H3}" fill="#fff" stroke="#777" stroke-width=".2"/>`);
     box(tbx, G.TB);
-    [['TOTALE', 2.3, 800, 3.6], ['del giro', 2, 600, 6.5], [rng(0, tmax), 1.9, 400, 9.5]].forEach(([t, fs, fw, dy]) =>
+    [['del giro', 2.1, 700, 3.3], [rng(0, tmax), 1.9, 400, 6.6]].forEach(([t, fs, fw, dy]) =>
       o.push(txt(tbx + G.TB/2, ly + dy, t, {fs, fw, a:'middle', fill: fw < 500 ? '#555' : '#111'})));
     U.forEach(u => {
       if (u.k[0] === 'Y'){
         const ys = U.filter(z => z.k[0] === 'Y'); if (u !== ys[0]) return;
-        const w5 = ys.reduce((t, z) => t + z.w, 0); box(u.x, w5);
-        o.push(txt(u.x+w5/2, ly+3.3, 'Annerisci', {fs:fitFs('Annerisci', w5 - 1, 2.1), a:'middle'}));
-        o.push(txt(u.x+w5/2, ly+6.4, 'UN SOLO voto', {fs:fitFs('UN SOLO voto', w5 - 1, 2.4, .62), fw:800, a:'middle'}));
-        o.push(txt(u.x+w5/2, ly+9.4, 'da 1 a 5', {fs:fitFs('da 1 a 5', w5 - 1, 2.1), a:'middle'}));
+        box(u.x, ys.reduce((t, z) => t + z.w, 0));
         return;
       }
       if (u.k[0] === 'Z'){
         // promemoria dei criteri della zona, sopra i suoi cerchi: carattere più grande che sta in 3 righe
         const zs = U.filter(z => z.z === u.z); if (u !== zs[0]) return;
         const wz = zs.reduce((t, z) => t + z.w, 0), [, n, crit] = ZB.find(z => z[0] === u.z); box(u.x, wz);
-        let fs = 1.9, lines; while ((lines = wrap(crit, Math.floor((wz - 1) / (fs * .52)))).length > 3 && fs > 1.3) fs -= .05;
-        lines.slice(0, 3).forEach((l, i) => o.push(txt(u.x+wz/2, ly+2.3+i*fs*1.15, l, {fs, fill:'#333', a:'middle'})));
-        const t = `da ${n}: −1 per errore`;
-        o.push(txt(u.x+wz/2, ly+G.H3-1.1, t, {fs:fitFs(t, wz - 1, 2.1, .6), fw:800, a:'middle'}));
+        const lw = Math.max(...crit.split(' ').map(t => t.length));   // la parola più lunga deve stare nella zona
+        let fs = Math.min(2.1, (wz - 1) / (lw * .55)), lines; while ((lines = wrap(crit, Math.floor((wz - 1) / (fs * .52)))).length > 3 && fs > 1.3) fs -= .05;
+        lines = lines.slice(0, 3); const lh = fs*1.15, y0 = ly + (G.H3 - lines.length*lh)/2 + fs*.8;
+        lines.forEach((l, i) => o.push(txt(u.x+wz/2, y0 + i*lh, l, {fs, fill:'#222', a:'middle'})));
         return;
       }
       box(u.x, u.w);
-      if (u.t === 'v'){
-        const t1 = 'Annerisci UN SOLO cerchio da 0 a 20', t2 = 'postura · fluidità · eleganza · correttezza tecnica · dinamicità';
-        o.push(txt(u.x+u.w/2, ly+4.6, t1, {fs:fitFs(t1, u.w - 2, 2.6, .58), fw:700, a:'middle'}));
-        o.push(txt(u.x+u.w/2, ly+8.4, t2, {fs:fitFs(t2, u.w - 2, 2.1, .54), fill:'#555', a:'middle'}));
+      if (u.t === 'v') return;
+      const cx = u.x + u.w/2;
+      if (u.k === 'AE'){   // "Andatura errata = 0", in orizzontale su tre righe
+        const ls = ['Andatura', 'errata', '= 0'], fs = Math.min(1.9, fitFs('Andatura', u.w - .8, 1.9, .62)), lh = (G.H3 - 1) / 3;
+        ls.forEach((l, i) => o.push(txt(cx, ly + .5 + lh*(i + .5) + fs*.36, l, {fs, fw:700, a:'middle'})));
         return;
       }
-      const cx = u.x + u.w/2;
       let lines;
-      if (u.k === 'AE') lines = [['Andatura', 1], ['errata = 0', 1]];
-      else { const w = wrap(u.lab, 11).slice(0, 3); lines = [[u.k, 1]].concat(w.map(l => [l, 0])); }
+      { const w = wrap(u.lab, 11).slice(0, 3); lines = [[u.k, 1]].concat(w.map(l => [l, 0])); }
       // testo verticale: righe affiancate, lette dal basso
       const lh = Math.min(2.15, (u.w - 1.2) / lines.length), nl = lines.length, x0l = cx - (nl-1)*lh/2 + .7;
       lines.forEach(([l, b], i) => {
@@ -541,7 +537,7 @@ function sheetSVG(sh){
       o.push(`<rect x="${G.TX}" y="${y}" width="${G.TW}" height="${G.RH}" fill="#ececec"/>`);
       continue;
     }
-    if (r % 2) o.push(`<rect x="${G.TX}" y="${y}" width="${G.TW}" height="${G.RH}" fill="#f1f1f1"/>`);   // righe alterne, per seguire la riga
+    if (r % 2) o.push(`<rect x="${G.TX}" y="${y}" width="${G.TW}" height="${G.RH}" fill="#f1f1f1"/>`);   // righe alterne bianche e grigio chiaro, anche sotto i quadratini dei totali: aiutano a seguire la riga
     [G.TX, p2x].forEach(px => {
       const t = String(row.lab || row.p), w = ind ? G.PB - 1.2 : G.FIX[0] - .6, fs = fitFs(t, w, 4.9, .7);
       o.push(txt(px + (ind ? G.PB/2 : G.FIX[0]/2), y + G.RH/2 + fs*.36, t, {fs, fw:800, a:'middle'}));
@@ -549,8 +545,8 @@ function sheetSVG(sh){
     });
   }
   // griglia
-  const vx = new Set([G.TX, ...(ind ? [] : [G.TX+G.FIX[0], p2x+G.FIX[0]]), G.TX+G.FIX[0]+G.FIX[1], g0x, p2x, p2x+G.PB, G.TX+G.TW, G.FX]);
-  L.cols.forEach((U, g) => { U.forEach(u => vx.add(+u.x.toFixed(3))); vx.add(+(giroX(g) + G.UW).toFixed(3)); });
+  const vx = new Set([G.TX, ...(ind ? [] : [G.TX+G.FIX[0], p2x+G.FIX[0]]), G.TX+G.FIX[0]+G.FIX[1], g0x, p2x, p2x+G.PB, G.TX+G.TW]);
+  L.cols.forEach(U => U.forEach(u => vx.add(+u.x.toFixed(3))));
   vx.forEach(x => o.push(`<line x1="${x}" y1="${G.RY}" x2="${x}" y2="${tot}" stroke="#777" stroke-width=".2"/>`));
   // variante B: separatori spessi tra le zone
   if (sh.variant === 'B') L.cols.forEach(U => U.forEach((u, i) => { if (i && u.z !== U[i-1].z) o.push(`<line x1="${u.x}" y1="${G.RY}" x2="${u.x}" y2="${tot}" stroke="#111" stroke-width=".5"/>`); }));
@@ -558,18 +554,21 @@ function sheetSVG(sh){
     const y = G.RY + r*G.RH, th = (r % 5 === 0 && r) ? .55 : .2;
     o.push(`<line x1="${G.TX}" y1="${y}" x2="${G.TX+G.TW}" y2="${y}" stroke="${th > .3 ? '#111' : '#777'}" stroke-width="${th}"/>`);
   }
-  [[g0x, .6], [p2x, .9], [p2x+G.PB, .6], [giroX(0) + G.UW, .5], [giroX(1) + G.UW, .5], [G.FX, .9]].forEach(([x, w]) =>
+  [[g0x, .6], [p2x, .9], [p2x+G.PB, .6]].forEach(([x, w]) =>
     o.push(`<line x1="${x}" y1="${G.TY}" x2="${x}" y2="${tot}" stroke="#111" stroke-width="${w}"/>`));
+  // colonne dei totali: linee grigio chiaro e sottili, così risaltano solo i quadratini
+  [giroX(0) + G.UW, giroX(1) + G.UW, G.FX].forEach(x => o.push(`<line x1="${x}" y1="${G.RY}" x2="${x}" y2="${tot}" stroke="#bbb" stroke-width=".25"/>`));
   // cerchi e quadratini delle cifre
   L.bubbles.forEach(b => {
     if (b.sq) o.push(`<rect x="${b.cx-b.r}" y="${b.cy-b.r}" width="${b.r*2}" height="${b.r*2}" rx=".5" fill="none" stroke="#333" stroke-width=".28"/>`);
     else {
       const red = b.key === 'AE';
       o.push(`<circle cx="${b.cx}" cy="${b.cy}" r="${b.r}" fill="none" stroke="${red ? '#c0392b' : '#222'}" stroke-width="${red ? .38 : .28}"/>`);
-      if (b.val !== undefined) o.push(txt(b.cx, b.cy + b.r*.4, b.val, {fs: b.r*1.1, fw:600, fill:NUM_COL, a:'middle'}));
+      if (b.val !== undefined){   // numeri grandi e marcati; nei cerchi piccoli (scala 0–20 del capo) i numeri a due cifre un po' più stretti
+        const big = b.r >= 2.2, fs = b.r*(big ? 1.45 : b.val > 9 ? 1.2 : 1.45); o.push(txt(b.cx, b.cy + fs*.36, b.val, {fs, fw:800, fill:NUM_COL, a:'middle'})); }
     }
   });
-  L.boxes.forEach(b => { if (b.key !== 'SG') o.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#fff" stroke="#111" stroke-width=".45"/>`); });
+  L.boxes.forEach(b => { if (b.key !== 'SG') o.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="none" stroke="#a0a0a0" stroke-width=".3"/>`); });   // grigio medio-chiaro: l’inchiostro delle cifre si distingue dal bordo
   // piè di pagina
   const fy = 202.6;
   o.push(txt(13, fy, 'Firma ' + (campo ? 'giudice' : 'giudice capo'), {fs:2.3}));
@@ -888,17 +887,17 @@ function buildSheets(gara){
         const prova = k => P ? P[k-1].label : (gara.prove || [])[k-1] || `Prova ${k}`;
         const sec2 = `${sec.idx}${sec.type}`;
         sheets.push({kind:'campo', type:sec.type, judge:'G'+j, variant: vB ? 'B' : 'A', sec:sec.idx, foglio:fi+1, rows,
-          title: sec.type === 'IND' ? 'GIUDICE DI CAMPO' : 'GIUDICE DI CAMPO · COPPIE', subtitle: `Giudice G${j}` + (vB ? ' · scheda a zone' : ''),
+          title: sec.type === 'IND' ? 'GIUDICE DI CAMPO' : 'GIUDICE DI CAMPO · COPPIE', subtitle: `Giudice G${j}`,
           post1, post2, prova1: prova(post1), prova2: prova(post2), anno: gara.anno,
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice', '', 58]],
-          ins: (vB ? 'Pennarello nero · un cerchio per zona' : 'Pennarello nero · un cerchio per elemento corretto') + sync + ' · totali: una cifra per quadratino (08)' + corr,
+          ins: vB ? 'Pennarello nero · totali una cifra per quadratino (08) · correzione: X sul cerchio sbagliato' : 'Pennarello nero · un cerchio per elemento corretto' + sync + ' · totali una cifra per quadratino (08)' + corr,
           payload: makePayload(gara.code, sec2, 'G'+j+(vB ? 'B' : ''), fi+1, p1, p2)});
       }
       for (let c = 1; c <= gara.nc; c++){
         sheets.push({kind:'capo', type:sec.type, judge:'C'+c, sec:sec.idx, foglio:fi+1, rows, anno: gara.anno,
           title: sec.type === 'IND' ? 'GIUDICE CAPO' : 'GIUDICE CAPO · COPPIE', subtitle: gara.nc > 1 ? `Giudice capo ${c}` : 'Giudice capo',
           meta: [['Tappa', gara.tappa, 30], ['Data', gara.data, 24], ['Gara', gara1, 62], ['Nome giudice capo', '', 58]],
-          ins: 'Pennarello nero · un solo voto per giro' + sync + ' · totali: una cifra per quadratino (08)' + corr,
+          ins: 'Pennarello nero · totali una cifra per quadratino (08) · correzione: X sul cerchio sbagliato',
           payload: makePayload(gara.code, `${sec.idx}${sec.type}`, 'C'+c, fi+1, p1, p2)});
       }
     });
@@ -2138,6 +2137,9 @@ async function readSheet(img, manual){
   // inchiostro già stampato nel modulo vuoto (numeri dentro i cerchi): va sottratto dalla misura
   const tpl = await templateInk(sh, qr);
   // QR letto solo sulla foto intera, o codice a mano: il verso del foglio lo dà il confronto con il modulo vuoto
+  // anche con il QR letto gli angoli vanno confermati dal confronto con il modulo vuoto: il QR si legge anche con angoli
+  // sbagliati (una cifra scritta scambiata per un quadrato nero) e allora i cerchi verrebbero misurati nel posto sbagliato
+  if (warp && pearson(cellInk(tpl), cellInk(warp)) < ORIENT_MIN) warp = null;
   let orient = null;
   if (!warp){
     // il confronto con il modulo vuoto conferma gli angoli: se non torna, le altre combinazioni (una cifra scritta a pennarello può sembrare un quadrato nero)
